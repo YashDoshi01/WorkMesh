@@ -1,0 +1,37 @@
+{
+  "name": "workmesh",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "WorkMesh control plane: durable job scheduling and workflow engine",
+  "engines": {
+    "node": ">=24.14.0 <25",
+    "npm": ">=11"
+  },
+  "packageManager": "npm@11.11.0",
+  "workspaces": [
+    "apps/api",
+    "packages/shared"
+  ],
+  "scripts": {
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "tsx --test tests/unit/*.test.ts",
+    "db:up": "docker compose -f infra/compose.yaml up -d",
+    "db:down": "docker compose -f infra/compose.yaml down",
+    "db:logs": "docker compose -f infra/compose.yaml logs -f postgres",
+    "dev:api": "tsx --env-file=.env apps/api/src/server.ts",
+    "test:integration": "tsx --env-file-if-exists=.env --test --test-concurrency=1 tests/integration/*.test.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.14.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}

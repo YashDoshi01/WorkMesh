@@ -1,0 +1,6 @@
+dist
+node_modules
+coverage
+package-lock.json
+docs/IMPLEMENTATION_PLAN.md
+TaskForge_Implementation_and_Learning_Plan (1).md
