@@ -4,6 +4,8 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { Scheduler, type Db } from "@workmesh/api";
 import { ApiError, Worker } from "@workmesh/worker-sdk";
 import { MachineAuth } from "../../apps/api/src/keys/auth.js";
+import { parseKey } from "../../apps/api/src/keys/keys.js";
+import { ApiKeyRepository } from "../../apps/api/src/keys/repository.js";
 import { jobRoutes } from "../../apps/api/src/jobs/routes.js";
 import { scheduleRoutes } from "../../apps/api/src/schedules/routes.js";
 import { workerRoutes } from "../../apps/api/src/workers/routes.js";
@@ -228,6 +230,24 @@ describe("machine-plane security (PostgreSQL)", () => {
       await call(a, "GET", "/jobs", k.secret);
       const third = (await db.query(`SELECT last_used_at FROM api_keys`)).rows[0].last_used_at;
       assert.ok(third.getTime() > Date.now() - 60_000, "refreshed once stale");
+    });
+
+    it("authentication costs one statement per request; the last-use write happens once a minute, not on every request", async () => {
+      const k = await issue("client");
+      const seen: string[] = [];
+      const spy = {
+        query: (sql: string, params?: unknown[]) => (
+          seen.push(sql),
+          (db.query as any)(sql, params)
+        ),
+      } as unknown as Db;
+      const repo = new ApiKeyRepository(spy);
+      const parsed = parseKey(k.secret)!;
+      for (let i = 0; i < 5; i++) assert.equal((await repo.authenticate(parsed)).ok, true);
+      const selects = seen.filter((q) => /^\s*SELECT/i.test(q)).length;
+      const updates = seen.filter((q) => /UPDATE api_keys/i.test(q)).length;
+      assert.equal(selects, 5, "one lookup per request");
+      assert.equal(updates, 1, "the first use writes last_used_at; the next four do not");
     });
 
     it("key creation and revocation are audited, with the key's identity but never its secret", async () => {
@@ -558,6 +578,24 @@ describe("machine-plane security (PostgreSQL)", () => {
       }
       const row = (await db.query(`SELECT status FROM jobs`)).rows[0];
       assert.equal(row.status, "running", "the impostor changed nothing");
+    });
+
+    it("a cached ownership answer is per key: after the owner reported, an impostor on the SAME instance is still refused", async () => {
+      const { k1, k2, w1, job } = await setup();
+      await call(a, "POST", `/workers/${w1.id}/claim`, k1.secret, { limit: 1 });
+      // The owner's report makes this instance remember "k1 owns w1".
+      const own = await call(a, "POST", `/jobs/${job.id}/heartbeat`, k1.secret, {
+        workerId: w1.id,
+        attempt: 1,
+      });
+      assert.equal(own.status, 200);
+      // The impostor asks the very same instance.
+      const impostor = await call(a, "POST", `/jobs/${job.id}/complete`, k2.secret, {
+        workerId: w1.id,
+        attempt: 1,
+      });
+      assert.equal(impostor.status, 403);
+      assert.equal(impostor.body.error.code, "worker_not_yours");
     });
 
     it("a worker cannot complete a job it does not hold, nor a stale attempt", async () => {

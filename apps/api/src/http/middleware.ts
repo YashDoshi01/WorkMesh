@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ErrorRequestHandler, RequestHandler } from "express";
-import { logError, logInfo } from "@workmesh/shared";
+import { logError, logInfo, logWarn } from "@workmesh/shared";
+import { isDatabaseUnavailable } from "../db/errors.js";
 import { HttpError } from "./errors.js";
 
 declare module "express-serve-static-core" {
@@ -74,6 +75,24 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         code: http.code,
         message: http.message,
         ...(http.details === undefined ? {} : { details: http.details }),
+        requestId: req.requestId,
+      },
+    });
+    return;
+  }
+  // The database cannot be reached (down, restarting, connection timeout): tell the caller to
+  // retry shortly. This is a 503, not a 500, because nothing is wrong with the request or the code,
+  // and the log says so (a stream of these means look at PostgreSQL, not at the API).
+  if (isDatabaseUnavailable(err)) {
+    logWarn("database_unavailable", {
+      requestId: req.requestId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    res.setHeader("Retry-After", "5");
+    res.status(503).json({
+      error: {
+        code: "database_unavailable",
+        message: "The service cannot reach its database right now; retry shortly",
         requestId: req.requestId,
       },
     });

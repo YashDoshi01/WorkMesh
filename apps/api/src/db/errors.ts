@@ -15,3 +15,18 @@ export function isTransientDbError(err: unknown): boolean {
   if (!/^[0-9A-Z]{5}$/.test(code)) return true;
   return ["08", "40", "53", "57", "58"].includes(code.slice(0, 2));
 }
+
+/**
+ * Should an HTTP request that failed with this error be answered "503, try again shortly"
+ * rather than "500, a bug"? True for everything `isTransientDbError` accepts, plus the two
+ * failures the `pg` driver raises WITHOUT a code: it could not get a connection within the pool's
+ * connection timeout, or an established connection was cut.
+ */
+export function isDatabaseUnavailable(err: unknown): boolean {
+  if (isTransientDbError(err)) return true;
+  const message = (err as { message?: unknown } | null)?.message;
+  return (
+    typeof message === "string" &&
+    /timeout exceeded when trying to connect|Connection terminated|connection error/i.test(message)
+  );
+}

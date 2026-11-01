@@ -1,0 +1,218 @@
+{
+  "scenario": "pool",
+  "environment": {
+    "capturedAt": "2026-11-01T19:39:35.299Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": "defaults",
+  "wallSeconds": 214,
+  "result": [
+    {
+      "dbPoolMaxPerInstance": 3,
+      "throughputPerS": 653,
+      "spanS": 4.6,
+      "connectionStatesMidRun": [
+        {
+          "state": "active",
+          "count": 4
+        },
+        {
+          "state": "idle",
+          "count": 2
+        }
+      ],
+      "cpu": {
+        "api-2": {
+          "meanCores": 0.62,
+          "peakCores": 0.94,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.64,
+          "peakCores": 0.97,
+          "samples": 3
+        },
+        "gateway": {
+          "meanCores": 0.21,
+          "peakCores": 0.32,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 1.83,
+          "peakCores": 2.64,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "dbPoolMaxPerInstance": 5,
+      "throughputPerS": 771,
+      "spanS": 3.89,
+      "connectionStatesMidRun": [
+        {
+          "state": "active",
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "count": 8
+        }
+      ],
+      "cpu": {
+        "api-2": {
+          "meanCores": 0.73,
+          "peakCores": 1.12,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.71,
+          "peakCores": 1.07,
+          "samples": 3
+        },
+        "gateway": {
+          "meanCores": 0.22,
+          "peakCores": 0.34,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 1.78,
+          "peakCores": 3.4,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "dbPoolMaxPerInstance": 10,
+      "throughputPerS": 747,
+      "spanS": 4.02,
+      "connectionStatesMidRun": [
+        {
+          "state": "active",
+          "count": 11
+        },
+        {
+          "state": "idle",
+          "count": 9
+        }
+      ],
+      "cpu": {
+        "api-2": {
+          "meanCores": 0.75,
+          "peakCores": 1.17,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.77,
+          "peakCores": 1.15,
+          "samples": 3
+        },
+        "gateway": {
+          "meanCores": 0.25,
+          "peakCores": 0.38,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 2.41,
+          "peakCores": 3.63,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "dbPoolMaxPerInstance": 20,
+      "throughputPerS": 638,
+      "spanS": 4.71,
+      "connectionStatesMidRun": [
+        {
+          "state": "active",
+          "count": 8
+        },
+        {
+          "state": "idle",
+          "count": 32
+        }
+      ],
+      "cpu": {
+        "api-1": {
+          "meanCores": 0.81,
+          "peakCores": 1.18,
+          "samples": 3
+        },
+        "api-2": {
+          "meanCores": 0.81,
+          "peakCores": 1.23,
+          "samples": 3
+        },
+        "gateway": {
+          "meanCores": 0.26,
+          "peakCores": 0.39,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 2.59,
+          "peakCores": 3.72,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "dbPoolMaxPerInstance": 40,
+      "throughputPerS": 774,
+      "spanS": 3.88,
+      "connectionStatesMidRun": [
+        {
+          "state": "active",
+          "count": 12
+        },
+        {
+          "state": "idle",
+          "count": 68
+        }
+      ],
+      "cpu": {
+        "api-1": {
+          "meanCores": 0.68,
+          "peakCores": 1.18,
+          "samples": 3
+        },
+        "api-2": {
+          "meanCores": 0.77,
+          "peakCores": 1.16,
+          "samples": 3
+        },
+        "gateway": {
+          "meanCores": 0.24,
+          "peakCores": 0.36,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 2.56,
+          "peakCores": 3.85,
+          "samples": 3
+        }
+      }
+    }
+  ]
+}

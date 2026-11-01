@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 8** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
+**Current milestone: Phase 9 (complete)** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
 
 ## Architecture (target)
 
@@ -62,7 +62,8 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 | `npm run dev:dashboard`    | Run the dashboard dev server on http://localhost:5173                         |
 | `npm run build:dashboard`  | Typecheck and build the dashboard to `apps/dashboard/dist`                    |
 | `npm run test:dashboard`   | Dashboard tests (Vitest + Testing Library)                                    |
-| `npm run keys -- <create   | list                                                                          | revoke>` | Create, list and revoke machine API keys (needs the API running and `OPERATOR_API_KEY`) |
+| `npm run keys -- <create   | list                                                                          | revoke>` | Create, list and revoke machine API keys (needs the API running and `OPERATOR_API_KEY`)         |
+| `npm run bench -- <perf    | failure                                                                       | ...>`    | Repeatable performance and failure experiments on an isolated stack (see `docs/PERFORMANCE.md`) |
 | `npm run gateway:up`       | Build and start NGINX + 2 API instances + PostgreSQL on http://localhost:8080 |
 | `npm run gateway:down`     | Stop that stack                                                               |
 | `npm run gateway:logs`     | Follow the stack's logs (NGINX logs JSON per request)                         |
@@ -97,6 +98,7 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 - [Architecture](docs/ARCHITECTURE.md)
 - [Gateway and scaling](docs/GATEWAY.md)
 - [Security](docs/SECURITY.md), [threat model](docs/THREAT_MODEL.md), [observability](docs/OBSERVABILITY.md)
+- [Performance and failure tests](docs/PERFORMANCE.md), [recovery](docs/RECOVERY.md), [diagrams](docs/DIAGRAMS.md), [demo script](docs/DEMO.md), [interview notes](docs/INTERVIEW_NOTES.md)
 - [Decisions](docs/DECISIONS.md)
 - [Learning log](docs/LEARNING_LOG.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
@@ -227,3 +229,25 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8080/jobs -Headers $h -Cont
 ```
 
 Keys are stored only as SHA-256 digests, can be revoked instantly on every instance, and are bound to an **account**: a client sees only its own jobs and a worker only claims its account's jobs. Logs never contain keys or payloads. `GET /ops/metrics` (viewer key) exposes queue depth, wait and run times, retries, failures, workers and expired leases. Details and limitations: [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md).
+
+## Measured performance (Phase 9)
+
+Every figure below is from `bench/results/` and was taken on **one laptop with everything co-located** (AMD Ryzen 5 5600H, 12 logical cores, Docker Desktop, 2 API instances, PostgreSQL 17.6 with default settings, the load generator on the same machine). They show how this design behaves and where it saturates here; they are not a capacity claim for other hardware. Full tables, method and caveats: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
+
+| Measurement                                  | Result                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------ |
+| Job submissions through NGINX, 2 instances   | about 1,700 per second at 16 to 64 clients; p50 36 ms, p99 58 ms at 64 clients |
+| One instance vs two                          | 1,155 vs 1,694 per second (1.47x on one machine)                               |
+| Job completions (zero-work handlers)         | about 800 to 1,000 per second, flat from 1 to 8 workers                        |
+| Claim with 19,000 jobs queued                | p50 8.4 ms, p99 10.3 ms                                                        |
+| Controlled optimization (5 runs per variant) | submit +12.6%, completion +20.2%                                               |
+| Instance killed during POST traffic          | 8 requests failed, 4 to 5 duplicate jobs, 0 acknowledged jobs lost             |
+| Worker killed mid-job                        | all jobs finished; recovery 4.7 to 5.2 s with a 6 s lease                      |
+| PostgreSQL stopped for about 12 s            | API stayed up; failures took 2.0 s (`503`); 0 acknowledged jobs lost           |
+
+```bash
+npm run bench -- perf        # about 7 minutes
+npm run bench -- failure     # about 4 minutes
+```
+
+Known limits stated plainly: at-least-once delivery (not exactly-once), no idempotency key on `POST /jobs`, NGINX and PostgreSQL are single points of failure, no TLS. See [`docs/RECOVERY.md`](docs/RECOVERY.md) and [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).

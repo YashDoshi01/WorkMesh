@@ -1,0 +1,289 @@
+{
+  "scenario": "submit",
+  "environment": {
+    "capturedAt": "2026-11-01T19:52:42.552Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": "defaults",
+  "wallSeconds": 142,
+  "result": {
+    "withShippedLimits": {
+      "concurrency": 64,
+      "durationS": 10,
+      "throughputPerS": 200,
+      "total": 23507,
+      "byStatus": {
+        "201": 2000,
+        "429": 21507
+      },
+      "latencyOk": {
+        "n": 2000,
+        "meanMs": 31.45,
+        "p50Ms": 29.68,
+        "p95Ms": 40.79,
+        "p99Ms": 45.7,
+        "maxMs": 80.62
+      },
+      "impliedInFlight": 6.29
+    },
+    "twoInstances": [
+      {
+        "concurrency": 1,
+        "durationS": 15,
+        "throughputPerS": 184.6,
+        "total": 2769,
+        "byStatus": {
+          "201": 2769
+        },
+        "latencyOk": {
+          "n": 2769,
+          "meanMs": 5.41,
+          "p50Ms": 5.57,
+          "p95Ms": 6.9,
+          "p99Ms": 8.31,
+          "maxMs": 33.67
+        },
+        "impliedInFlight": 1,
+        "cpu": {
+          "gateway": {
+            "meanCores": 0.08,
+            "peakCores": 0.11,
+            "samples": 9
+          },
+          "api-1": {
+            "meanCores": 0.14,
+            "peakCores": 0.19,
+            "samples": 9
+          },
+          "api-2": {
+            "meanCores": 0.14,
+            "peakCores": 0.2,
+            "samples": 9
+          },
+          "postgres": {
+            "meanCores": 0.23,
+            "peakCores": 0.3,
+            "samples": 9
+          }
+        }
+      },
+      {
+        "concurrency": 4,
+        "durationS": 15,
+        "throughputPerS": 894.5,
+        "total": 13418,
+        "byStatus": {
+          "201": 13418
+        },
+        "latencyOk": {
+          "n": 13418,
+          "meanMs": 4.47,
+          "p50Ms": 4.24,
+          "p95Ms": 5.89,
+          "p99Ms": 8.79,
+          "maxMs": 18.04
+        },
+        "impliedInFlight": 4,
+        "cpu": {
+          "gateway": {
+            "meanCores": 0.24,
+            "peakCores": 0.27,
+            "samples": 9
+          },
+          "api-1": {
+            "meanCores": 0.54,
+            "peakCores": 0.63,
+            "samples": 9
+          },
+          "api-2": {
+            "meanCores": 0.55,
+            "peakCores": 0.66,
+            "samples": 9
+          },
+          "postgres": {
+            "meanCores": 1.04,
+            "peakCores": 1.1,
+            "samples": 9
+          }
+        }
+      },
+      {
+        "concurrency": 16,
+        "durationS": 15,
+        "throughputPerS": 1664.5,
+        "total": 24967,
+        "byStatus": {
+          "201": 24967
+        },
+        "latencyOk": {
+          "n": 24967,
+          "meanMs": 9.6,
+          "p50Ms": 9.04,
+          "p95Ms": 13.92,
+          "p99Ms": 20.05,
+          "maxMs": 57.37
+        },
+        "impliedInFlight": 15.98,
+        "cpu": {
+          "gateway": {
+            "meanCores": 0.49,
+            "peakCores": 0.53,
+            "samples": 9
+          },
+          "api-1": {
+            "meanCores": 1.01,
+            "peakCores": 1.04,
+            "samples": 9
+          },
+          "api-2": {
+            "meanCores": 1.02,
+            "peakCores": 1.04,
+            "samples": 9
+          },
+          "postgres": {
+            "meanCores": 2.71,
+            "peakCores": 2.8,
+            "samples": 9
+          }
+        }
+      },
+      {
+        "concurrency": 64,
+        "durationS": 15,
+        "throughputPerS": 1693.7,
+        "total": 25405,
+        "byStatus": {
+          "201": 25405
+        },
+        "latencyOk": {
+          "n": 25405,
+          "meanMs": 37.78,
+          "p50Ms": 36.1,
+          "p95Ms": 51.18,
+          "p99Ms": 58.09,
+          "maxMs": 82.39
+        },
+        "impliedInFlight": 63.99,
+        "cpu": {
+          "gateway": {
+            "meanCores": 0.51,
+            "peakCores": 0.55,
+            "samples": 9
+          },
+          "api-1": {
+            "meanCores": 1.02,
+            "peakCores": 1.06,
+            "samples": 9
+          },
+          "api-2": {
+            "meanCores": 1.01,
+            "peakCores": 1.05,
+            "samples": 9
+          },
+          "postgres": {
+            "meanCores": 2.82,
+            "peakCores": 2.93,
+            "samples": 9
+          }
+        }
+      },
+      {
+        "concurrency": 128,
+        "durationS": 15,
+        "throughputPerS": 1615.6,
+        "total": 24234,
+        "byStatus": {
+          "201": 24234
+        },
+        "latencyOk": {
+          "n": 24234,
+          "meanMs": 79.17,
+          "p50Ms": 75.34,
+          "p95Ms": 107.74,
+          "p99Ms": 131.36,
+          "maxMs": 167.39
+        },
+        "impliedInFlight": 127.91,
+        "cpu": {
+          "gateway": {
+            "meanCores": 0.57,
+            "peakCores": 0.62,
+            "samples": 9
+          },
+          "api-1": {
+            "meanCores": 1.03,
+            "peakCores": 1.07,
+            "samples": 9
+          },
+          "api-2": {
+            "meanCores": 1.02,
+            "peakCores": 1.07,
+            "samples": 9
+          },
+          "postgres": {
+            "meanCores": 2.85,
+            "peakCores": 2.95,
+            "samples": 9
+          }
+        }
+      }
+    ],
+    "oneInstance": {
+      "concurrency": 64,
+      "durationS": 15,
+      "throughputPerS": 1154.9,
+      "total": 17324,
+      "byStatus": {
+        "201": 17324
+      },
+      "latencyOk": {
+        "n": 17324,
+        "meanMs": 55.39,
+        "p50Ms": 53.82,
+        "p95Ms": 67.22,
+        "p99Ms": 75.92,
+        "maxMs": 2049.59
+      },
+      "impliedInFlight": 63.97,
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.3,
+          "peakCores": 0.34,
+          "samples": 9
+        },
+        "api-1": {
+          "meanCores": 1,
+          "peakCores": 1.06,
+          "samples": 9
+        },
+        "postgres": {
+          "meanCores": 1.47,
+          "peakCores": 1.59,
+          "samples": 9
+        }
+      }
+    }
+  }
+}

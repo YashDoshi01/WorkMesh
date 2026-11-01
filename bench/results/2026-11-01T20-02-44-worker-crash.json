@@ -1,0 +1,57 @@
+{
+  "scenario": "worker-crash",
+  "environment": {
+    "capturedAt": "2026-11-01T20:02:44.017Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": {
+    "LEASE_MS": "6000",
+    "REAPER_INTERVAL_MS": "1000",
+    "RETRY_BASE_MS": "2000"
+  },
+  "wallSeconds": 14,
+  "result": {
+    "jobs": 10,
+    "succeeded": 10,
+    "leaseMs": 6000,
+    "reaperMs": 1000,
+    "clockOffsetMs": 50,
+    "secondsAfterKill": {
+      "leaseExpiredRecorded": [4.65, 4.65, 4.65, 4.65, 4.65],
+      "jobsFinished": [4.44, 4.44, 4.44, 4.44, 4.46, 9.96, 10.34, 10.4, 10.59, 10.65]
+    },
+    "attemptsPerJob": [
+      {
+        "attempts": 1,
+        "jobs": 5
+      },
+      {
+        "attempts": 2,
+        "jobs": 5
+      }
+    ],
+    "waitedMs": 10877
+  }
+}

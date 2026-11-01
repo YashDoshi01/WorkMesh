@@ -1,0 +1,93 @@
+{
+  "scenario": "backlog",
+  "environment": {
+    "capturedAt": "2026-11-01T19:32:46.356Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": "defaults",
+  "wallSeconds": 42,
+  "result": {
+    "total": 20000,
+    "seedSeconds": 13.8,
+    "submitEarly": {
+      "n": 2000,
+      "meanMs": 43.41,
+      "p50Ms": 42.53,
+      "p95Ms": 56.33,
+      "p99Ms": 67.27,
+      "maxMs": 86.98
+    },
+    "submitLate": {
+      "n": 2000,
+      "meanMs": 43.56,
+      "p50Ms": 42.73,
+      "p95Ms": 54.2,
+      "p99Ms": 59.96,
+      "maxMs": 66.53
+    },
+    "claimAtDepth": {
+      "n": 100,
+      "meanMs": 9.12,
+      "p50Ms": 8.81,
+      "p95Ms": 11.02,
+      "p99Ms": 12.87,
+      "maxMs": 17.84
+    },
+    "metricsQuery": {
+      "n": 20,
+      "meanMs": 9.59,
+      "p50Ms": 8.78,
+      "p95Ms": 13.84,
+      "p99Ms": 15.4,
+      "maxMs": 15.4
+    },
+    "oldestReadyAgeSeconds": 13.975786,
+    "drainSpanSeconds": 25.1,
+    "drainPerS": 798,
+    "observedWaitMs": 23684,
+    "cpu": {
+      "gateway": {
+        "meanCores": 0.3,
+        "peakCores": 0.39,
+        "samples": 12
+      },
+      "api-1": {
+        "meanCores": 0.84,
+        "peakCores": 0.95,
+        "samples": 12
+      },
+      "api-2": {
+        "meanCores": 0.83,
+        "peakCores": 1.05,
+        "samples": 12
+      },
+      "postgres": {
+        "meanCores": 3.12,
+        "peakCores": 3.54,
+        "samples": 12
+      }
+    }
+  }
+}

@@ -71,3 +71,4 @@ Thumbs.db
 # IDE
 .idea/
 .vscode-test
+bench/.generated/

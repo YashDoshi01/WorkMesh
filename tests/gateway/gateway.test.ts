@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import { after, before, describe, test } from "node:test";
 
 // End-to-end tests of the REAL deployment: NGINX in front of two API containers and one
@@ -36,6 +37,16 @@ function compose(...args: string[]): string {
   }
   return result.stdout;
 }
+
+/**
+ * Runs docker WITHOUT blocking the event loop. The load generators in these tests run in this same
+ * process: a synchronous call would freeze them for as long as the command takes, so the fault
+ * would be injected while NO requests are in flight (the first version of these tests did that and
+ * overstated how well an instance kill is survived).
+ */
+const dockerAsync = async (...args: string[]): Promise<void> => {
+  await promisify(execFile)("docker", args);
+};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const container = (service: string) => `${PROJECT}-${service}-1`;
@@ -355,7 +366,7 @@ describe("gateway: NGINX in front of two API instances and one PostgreSQL", () =
     await sleep(1500);
     const before = load.outcomes.length;
     const started = Date.now();
-    execFileSync("docker", ["stop", container("api-1")], { stdio: "ignore" });
+    await dockerAsync("stop", container("api-1"));
     const stopMs = Date.now() - started;
     await sleep(2500);
     const outcomes = await load.stop();
@@ -397,7 +408,7 @@ describe("gateway: NGINX in front of two API instances and one PostgreSQL", () =
     const job = await call("POST", "/jobs", { body: { type: "gw.kill", payload: {} } });
     const load = startLoad(`/jobs/${job.body.id}`);
     await sleep(1500);
-    execFileSync("docker", ["kill", container("api-2")], { stdio: "ignore" });
+    await dockerAsync("kill", container("api-2"));
     await sleep(4000);
     const outcomes = await load.stop();
     const failures = outcomes.filter((o) => !o.ok);

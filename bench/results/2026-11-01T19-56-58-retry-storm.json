@@ -1,0 +1,161 @@
+{
+  "scenario": "retry-storm",
+  "environment": {
+    "capturedAt": "2026-11-01T19:56:58.562Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": {
+    "LEASE_MS": "6000",
+    "REAPER_INTERVAL_MS": "1000",
+    "RETRY_BASE_MS": "2000"
+  },
+  "wallSeconds": 17,
+  "result": {
+    "jobs": 1000,
+    "retryBaseMs": 2000,
+    "endedFailedAfterFourAttempts": 1000,
+    "perAttempt": [
+      {
+        "attempt": 1,
+        "total": 1000,
+        "firstSec": 0,
+        "lastSec": 1,
+        "peakPerSecond": 908,
+        "secondsUsed": 2
+      },
+      {
+        "attempt": 2,
+        "total": 1000,
+        "firstSec": 1,
+        "lastSec": 3,
+        "peakPerSecond": 642,
+        "secondsUsed": 3
+      },
+      {
+        "attempt": 3,
+        "total": 1000,
+        "firstSec": 3,
+        "lastSec": 6,
+        "peakPerSecond": 459,
+        "secondsUsed": 4
+      },
+      {
+        "attempt": 4,
+        "total": 1000,
+        "firstSec": 7,
+        "lastSec": 14,
+        "peakPerSecond": 250,
+        "secondsUsed": 8
+      }
+    ],
+    "perSecond": [
+      {
+        "attempt": 1,
+        "sec": 0,
+        "starts": 908
+      },
+      {
+        "attempt": 1,
+        "sec": 1,
+        "starts": 92
+      },
+      {
+        "attempt": 2,
+        "sec": 1,
+        "starts": 348
+      },
+      {
+        "attempt": 2,
+        "sec": 2,
+        "starts": 642
+      },
+      {
+        "attempt": 2,
+        "sec": 3,
+        "starts": 10
+      },
+      {
+        "attempt": 3,
+        "sec": 3,
+        "starts": 56
+      },
+      {
+        "attempt": 3,
+        "sec": 4,
+        "starts": 336
+      },
+      {
+        "attempt": 3,
+        "sec": 5,
+        "starts": 459
+      },
+      {
+        "attempt": 3,
+        "sec": 6,
+        "starts": 149
+      },
+      {
+        "attempt": 4,
+        "sec": 7,
+        "starts": 4
+      },
+      {
+        "attempt": 4,
+        "sec": 8,
+        "starts": 48
+      },
+      {
+        "attempt": 4,
+        "sec": 9,
+        "starts": 154
+      },
+      {
+        "attempt": 4,
+        "sec": 10,
+        "starts": 217
+      },
+      {
+        "attempt": 4,
+        "sec": 11,
+        "starts": 250
+      },
+      {
+        "attempt": 4,
+        "sec": 12,
+        "starts": 204
+      },
+      {
+        "attempt": 4,
+        "sec": 13,
+        "starts": 109
+      },
+      {
+        "attempt": 4,
+        "sec": 14,
+        "starts": 14
+      }
+    ]
+  }
+}

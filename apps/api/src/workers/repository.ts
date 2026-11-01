@@ -52,13 +52,28 @@ export class WorkerRepository {
     return toWorker(result.rows[0]!);
   }
 
+  /**
+   * Worker ids that are known to belong to a key (id -> key id). Only POSITIVE answers are kept: a
+   * worker row is never reassigned to another key, so "this key owns this worker" can never become
+   * false later, whereas a "no" could become "yes" when the worker registers. Bounded, and per
+   * process (each API instance learns on its own).
+   */
+  private readonly owned = new Map<string, string>();
+  private static readonly OWNED_CACHE_MAX = 10_000;
+
   /** Whether this worker id was registered by the given API key. */
   async isOwnedBy(id: string, apiKeyId: string): Promise<boolean> {
+    if (this.owned.get(id) === apiKeyId) return true;
     const r = await this.db.query("SELECT 1 FROM workers WHERE id = $1 AND api_key_id = $2", [
       id,
       apiKeyId,
     ]);
-    return (r.rowCount ?? 0) > 0;
+    const owns = (r.rowCount ?? 0) > 0;
+    if (owns) {
+      if (this.owned.size >= WorkerRepository.OWNED_CACHE_MAX) this.owned.clear();
+      this.owned.set(id, apiKeyId);
+    }
+    return owns;
   }
 
   /** Records "this worker is alive now". Returns null for an unknown worker id. */

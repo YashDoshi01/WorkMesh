@@ -29,6 +29,7 @@
     "test:integration": "tsx --env-file-if-exists=.env --test --test-concurrency=1 tests/integration/*.test.ts",
     "dev:worker": "tsx --env-file=.env apps/sample-worker/src/main.ts",
     "keys": "tsx --env-file-if-exists=.env apps/api/src/cli/keys.ts",
+    "bench": "tsx bench/run.ts",
     "dev:dashboard": "npm run dev -w @workmesh/dashboard",
     "build:dashboard": "npm run build -w @workmesh/dashboard",
     "test:dashboard": "npm run test -w @workmesh/dashboard",

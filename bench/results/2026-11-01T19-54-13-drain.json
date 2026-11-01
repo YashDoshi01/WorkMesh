@@ -1,0 +1,429 @@
+{
+  "scenario": "drain",
+  "environment": {
+    "capturedAt": "2026-11-01T19:54:13.291Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": "defaults",
+  "wallSeconds": 91,
+  "result": [
+    {
+      "workers": 1,
+      "concurrency": 1,
+      "handlerMs": 25,
+      "jobs": 300,
+      "slots": 1,
+      "spanS": 13.99,
+      "throughputPerS": 21.4,
+      "idealPerS": 40,
+      "slotUtilization": 0.54,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 7536.748,
+        "p95": 13692.04715,
+        "p99": 14225.87509
+      },
+      "executionMs": {
+        "p50": 38.86,
+        "p95": 40.75665,
+        "p99": 45.319119999999984
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.02,
+          "peakCores": 0.05,
+          "samples": 8
+        },
+        "api-1": {
+          "meanCores": 0.04,
+          "peakCores": 0.09,
+          "samples": 8
+        },
+        "api-2": {
+          "meanCores": 0.06,
+          "peakCores": 0.1,
+          "samples": 8
+        },
+        "postgres": {
+          "meanCores": 0.17,
+          "peakCores": 0.25,
+          "samples": 8
+        }
+      }
+    },
+    {
+      "workers": 1,
+      "concurrency": 8,
+      "handlerMs": 25,
+      "jobs": 1500,
+      "slots": 8,
+      "spanS": 8.31,
+      "throughputPerS": 180.5,
+      "idealPerS": 320,
+      "slotUtilization": 0.56,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 5133.097,
+        "p95": 8295.261499999999,
+        "p99": 8591.248979999998
+      },
+      "executionMs": {
+        "p50": 33.406,
+        "p95": 39.4041,
+        "p99": 42.59339000000001
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.08,
+          "peakCores": 0.13,
+          "samples": 5
+        },
+        "api-1": {
+          "meanCores": 0.15,
+          "peakCores": 0.23,
+          "samples": 5
+        },
+        "api-2": {
+          "meanCores": 0.2,
+          "peakCores": 0.28,
+          "samples": 5
+        },
+        "postgres": {
+          "meanCores": 0.59,
+          "peakCores": 0.78,
+          "samples": 5
+        }
+      }
+    },
+    {
+      "workers": 1,
+      "concurrency": 32,
+      "handlerMs": 25,
+      "jobs": 3000,
+      "slots": 32,
+      "spanS": 6.55,
+      "throughputPerS": 458.2,
+      "idealPerS": 1280,
+      "slotUtilization": 0.36,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 4807.629,
+        "p95": 6728.4592,
+        "p99": 6873.914099999998
+      },
+      "executionMs": {
+        "p50": 46.3705,
+        "p95": 64.6843,
+        "p99": 79.85585999999974
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.14,
+          "peakCores": 0.2,
+          "samples": 4
+        },
+        "api-1": {
+          "meanCores": 0.31,
+          "peakCores": 0.42,
+          "samples": 4
+        },
+        "api-2": {
+          "meanCores": 0.35,
+          "peakCores": 0.58,
+          "samples": 4
+        },
+        "postgres": {
+          "meanCores": 1.13,
+          "peakCores": 1.53,
+          "samples": 4
+        }
+      }
+    },
+    {
+      "workers": 2,
+      "concurrency": 32,
+      "handlerMs": 25,
+      "jobs": 3000,
+      "slots": 64,
+      "spanS": 4.45,
+      "throughputPerS": 673.4,
+      "idealPerS": 2560,
+      "slotUtilization": 0.26,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 3576.964,
+        "p95": 4671.1778,
+        "p99": 4744.61948
+      },
+      "executionMs": {
+        "p50": 60.965,
+        "p95": 85.42824999999995,
+        "p99": 133.4439799999999
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.21,
+          "peakCores": 0.29,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.47,
+          "peakCores": 0.68,
+          "samples": 3
+        },
+        "api-2": {
+          "meanCores": 0.48,
+          "peakCores": 0.69,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 1.8,
+          "peakCores": 2.39,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "workers": 4,
+      "concurrency": 32,
+      "handlerMs": 25,
+      "jobs": 3000,
+      "slots": 128,
+      "spanS": 3.71,
+      "throughputPerS": 808.2,
+      "idealPerS": 5120,
+      "slotUtilization": 0.16,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 3172.081,
+        "p95": 4002.9187500000003,
+        "p99": 4081.21676
+      },
+      "executionMs": {
+        "p50": 102.8115,
+        "p95": 148.22425,
+        "p99": 190.85194999999956
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.25,
+          "peakCores": 0.38,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.51,
+          "peakCores": 0.83,
+          "samples": 3
+        },
+        "api-2": {
+          "meanCores": 0.42,
+          "peakCores": 0.76,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 2.01,
+          "peakCores": 3.05,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "workers": 1,
+      "concurrency": 32,
+      "handlerMs": 0,
+      "jobs": 3000,
+      "slots": 32,
+      "spanS": 3.59,
+      "throughputPerS": 834.6,
+      "idealPerS": null,
+      "slotUtilization": null,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 3100.4485,
+        "p95": 3891.04625,
+        "p99": 3950.0851000000002
+      },
+      "executionMs": {
+        "p50": 16.3505,
+        "p95": 22.352999999999994,
+        "p99": 41.145179999999925
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.19,
+          "peakCores": 0.22,
+          "samples": 2
+        },
+        "api-1": {
+          "meanCores": 0.43,
+          "peakCores": 0.5,
+          "samples": 2
+        },
+        "api-2": {
+          "meanCores": 0.53,
+          "peakCores": 0.57,
+          "samples": 2
+        },
+        "postgres": {
+          "meanCores": 2.32,
+          "peakCores": 2.55,
+          "samples": 2
+        }
+      }
+    },
+    {
+      "workers": 2,
+      "concurrency": 32,
+      "handlerMs": 0,
+      "jobs": 3000,
+      "slots": 64,
+      "spanS": 3.04,
+      "throughputPerS": 988.2,
+      "idealPerS": null,
+      "slotUtilization": null,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 2830.453,
+        "p95": 3360.7389,
+        "p99": 3406.1513399999994
+      },
+      "executionMs": {
+        "p50": 27.573,
+        "p95": 40.50439999999999,
+        "p99": 94.58773999999988
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.25,
+          "peakCores": 0.39,
+          "samples": 2
+        },
+        "api-1": {
+          "meanCores": 0.55,
+          "peakCores": 0.87,
+          "samples": 2
+        },
+        "api-2": {
+          "meanCores": 0.37,
+          "peakCores": 0.52,
+          "samples": 2
+        },
+        "postgres": {
+          "meanCores": 2.17,
+          "peakCores": 3.4,
+          "samples": 2
+        }
+      }
+    },
+    {
+      "workers": 4,
+      "concurrency": 32,
+      "handlerMs": 0,
+      "jobs": 3000,
+      "slots": 128,
+      "spanS": 3.79,
+      "throughputPerS": 792.4,
+      "idealPerS": null,
+      "slotUtilization": null,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 3782.8684999999996,
+        "p95": 4255.18365,
+        "p99": 4323.360379999999
+      },
+      "executionMs": {
+        "p50": 65.4255,
+        "p95": 110.22619999999998,
+        "p99": 288.4269899999997
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.29,
+          "peakCores": 0.46,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.63,
+          "peakCores": 0.91,
+          "samples": 3
+        },
+        "api-2": {
+          "meanCores": 0.61,
+          "peakCores": 0.91,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 2.55,
+          "peakCores": 3.88,
+          "samples": 3
+        }
+      }
+    },
+    {
+      "workers": 8,
+      "concurrency": 32,
+      "handlerMs": 0,
+      "jobs": 3000,
+      "slots": 256,
+      "spanS": 3.87,
+      "throughputPerS": 775.2,
+      "idealPerS": null,
+      "slotUtilization": null,
+      "attemptsPerJob": 1,
+      "queueWaitMs": {
+        "p50": 3902.3810000000003,
+        "p95": 4446.52305,
+        "p99": 4555.415599999999
+      },
+      "executionMs": {
+        "p50": 131.0515,
+        "p95": 296.3744999999999,
+        "p99": 497.03344999999996
+      },
+      "cpu": {
+        "gateway": {
+          "meanCores": 0.28,
+          "peakCores": 0.43,
+          "samples": 3
+        },
+        "api-1": {
+          "meanCores": 0.58,
+          "peakCores": 0.89,
+          "samples": 3
+        },
+        "api-2": {
+          "meanCores": 0.58,
+          "peakCores": 0.87,
+          "samples": 3
+        },
+        "postgres": {
+          "meanCores": 2.22,
+          "peakCores": 3.76,
+          "samples": 3
+        }
+      }
+    }
+  ]
+}

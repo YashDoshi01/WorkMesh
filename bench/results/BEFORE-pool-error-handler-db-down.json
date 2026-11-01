@@ -1,0 +1,369 @@
+{
+  "scenario": "db-down",
+  "environment": {
+    "capturedAt": "2026-11-01T19:13:56.122Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": {
+    "LEASE_MS": "6000",
+    "REAPER_INTERVAL_MS": "1000",
+    "RETRY_BASE_MS": "2000"
+  },
+  "wallSeconds": 43,
+  "result": {
+    "events": [
+      {
+        "atS": 5,
+        "event": "docker stop postgres"
+      },
+      {
+        "atS": 5.7,
+        "event": "postgres stopped"
+      },
+      {
+        "atS": 15.71,
+        "event": "docker start postgres"
+      },
+      {
+        "atS": 16.05,
+        "event": "start returned"
+      }
+    ],
+    "apiState": {
+      "api-1": {
+        "state": "exited",
+        "restarts": 0,
+        "exitCode": 1
+      },
+      "api-2": {
+        "state": "exited",
+        "restarts": 0,
+        "exitCode": 1
+      }
+    },
+    "acknowledged": 320,
+    "acknowledgedButLost": 0,
+    "databaseStartIssuedAtS": 15.7,
+    "databaseStopIssuedAtS": 5,
+    "allAcknowledgedJobsFinished": true,
+    "finalJobStatuses": "succeeded:320",
+    "perSecond": [
+      {
+        "201": 60,
+        "sec": 0
+      },
+      {
+        "201": 64,
+        "sec": 1
+      },
+      {
+        "201": 64,
+        "sec": 2
+      },
+      {
+        "201": 64,
+        "sec": 3
+      },
+      {
+        "201": 64,
+        "sec": 4
+      },
+      {
+        "201": 4,
+        "sec": 5
+      },
+      {
+        "502": 17,
+        "sec": 7
+      },
+      {
+        "502": 68,
+        "sec": 8
+      },
+      {
+        "502": 64,
+        "sec": 9
+      },
+      {
+        "502": 64,
+        "sec": 10
+      },
+      {
+        "502": 64,
+        "sec": 11
+      },
+      {
+        "502": 64,
+        "sec": 12
+      },
+      {
+        "502": 64,
+        "sec": 13
+      },
+      {
+        "502": 64,
+        "sec": 14
+      },
+      {
+        "502": 48,
+        "sec": 15
+      },
+      {
+        "502": 64,
+        "sec": 16
+      },
+      {
+        "502": 64,
+        "sec": 17
+      },
+      {
+        "502": 64,
+        "sec": 18
+      },
+      {
+        "502": 64,
+        "sec": 19
+      },
+      {
+        "502": 64,
+        "sec": 20
+      },
+      {
+        "502": 68,
+        "sec": 21
+      },
+      {
+        "502": 64,
+        "sec": 22
+      },
+      {
+        "502": 64,
+        "sec": 23
+      },
+      {
+        "502": 64,
+        "sec": 24
+      },
+      {
+        "502": 64,
+        "sec": 25
+      },
+      {
+        "502": 64,
+        "sec": 26
+      },
+      {
+        "502": 64,
+        "sec": 27
+      },
+      {
+        "502": 64,
+        "sec": 28
+      },
+      {
+        "502": 64,
+        "sec": 29
+      },
+      {
+        "502": 64,
+        "sec": 30
+      },
+      {
+        "502": 64,
+        "sec": 31
+      },
+      {
+        "502": 64,
+        "sec": 32
+      },
+      {
+        "502": 64,
+        "sec": 33
+      },
+      {
+        "502": 64,
+        "sec": 34
+      },
+      {
+        "502": 68,
+        "sec": 35
+      },
+      {
+        "502": 64,
+        "sec": 36
+      },
+      {
+        "502": 64,
+        "sec": 37
+      },
+      {
+        "502": 64,
+        "sec": 38
+      },
+      {
+        "502": 64,
+        "sec": 39
+      },
+      {
+        "502": 4,
+        "sec": 40
+      }
+    ],
+    "readyz": [
+      {
+        "atS": 0,
+        "status": 200
+      },
+      {
+        "atS": 1,
+        "status": 200
+      },
+      {
+        "atS": 2,
+        "status": 200
+      },
+      {
+        "atS": 3,
+        "status": 200
+      },
+      {
+        "atS": 4.1,
+        "status": 200
+      },
+      {
+        "atS": 7.7,
+        "status": 502
+      },
+      {
+        "atS": 8.7,
+        "status": 502
+      },
+      {
+        "atS": 9.7,
+        "status": 502
+      },
+      {
+        "atS": 10.7,
+        "status": 502
+      },
+      {
+        "atS": 11.7,
+        "status": 502
+      },
+      {
+        "atS": 12.7,
+        "status": 502
+      },
+      {
+        "atS": 13.8,
+        "status": 502
+      },
+      {
+        "atS": 14.8,
+        "status": 502
+      },
+      {
+        "atS": 16,
+        "status": 502
+      },
+      {
+        "atS": 17.1,
+        "status": 502
+      },
+      {
+        "atS": 18.1,
+        "status": 502
+      },
+      {
+        "atS": 19.1,
+        "status": 502
+      },
+      {
+        "atS": 20.1,
+        "status": 502
+      },
+      {
+        "atS": 21.1,
+        "status": 502
+      },
+      {
+        "atS": 22.1,
+        "status": 502
+      },
+      {
+        "atS": 23.1,
+        "status": 502
+      },
+      {
+        "atS": 24.1,
+        "status": 502
+      },
+      {
+        "atS": 25.1,
+        "status": 502
+      },
+      {
+        "atS": 26.1,
+        "status": 502
+      },
+      {
+        "atS": 27.2,
+        "status": 502
+      },
+      {
+        "atS": 28.2,
+        "status": 502
+      },
+      {
+        "atS": 33.2,
+        "status": 504
+      },
+      {
+        "atS": 34.2,
+        "status": 502
+      },
+      {
+        "atS": 35.2,
+        "status": 502
+      },
+      {
+        "atS": 36.2,
+        "status": 502
+      },
+      {
+        "atS": 37.2,
+        "status": 502
+      },
+      {
+        "atS": 38.2,
+        "status": 502
+      },
+      {
+        "atS": 39.3,
+        "status": 502
+      }
+    ]
+  }
+}

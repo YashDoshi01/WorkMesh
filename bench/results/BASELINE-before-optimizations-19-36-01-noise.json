@@ -1,0 +1,109 @@
+{
+  "scenario": "noise",
+  "environment": {
+    "capturedAt": "2026-11-01T19:36:01.608Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": "defaults",
+  "wallSeconds": 75,
+  "result": {
+    "runs": [
+      {
+        "concurrency": 64,
+        "durationS": 15,
+        "throughputPerS": 1331.1,
+        "total": 19966,
+        "byStatus": {
+          "201": 19966
+        },
+        "latencyOk": {
+          "n": 19966,
+          "meanMs": 48.06,
+          "p50Ms": 46.56,
+          "p95Ms": 62.37,
+          "p99Ms": 72.68,
+          "maxMs": 95.11
+        },
+        "impliedInFlight": 63.97
+      },
+      {
+        "concurrency": 64,
+        "durationS": 15,
+        "throughputPerS": 1321.9,
+        "total": 19828,
+        "byStatus": {
+          "201": 19828
+        },
+        "latencyOk": {
+          "n": 19828,
+          "meanMs": 48.43,
+          "p50Ms": 46.9,
+          "p95Ms": 63.24,
+          "p99Ms": 73.74,
+          "maxMs": 109.23
+        },
+        "impliedInFlight": 64.02
+      },
+      {
+        "concurrency": 64,
+        "durationS": 15,
+        "throughputPerS": 1366.4,
+        "total": 20496,
+        "byStatus": {
+          "201": 20496
+        },
+        "latencyOk": {
+          "n": 20496,
+          "meanMs": 46.8,
+          "p50Ms": 45.78,
+          "p95Ms": 59.87,
+          "p99Ms": 68.44,
+          "maxMs": 99.25
+        },
+        "impliedInFlight": 63.95
+      },
+      {
+        "concurrency": 64,
+        "durationS": 15,
+        "throughputPerS": 1431.5,
+        "total": 21472,
+        "byStatus": {
+          "201": 21472
+        },
+        "latencyOk": {
+          "n": 21472,
+          "meanMs": 44.68,
+          "p50Ms": 43.36,
+          "p95Ms": 58.18,
+          "p99Ms": 69.57,
+          "maxMs": 111.88
+        },
+        "impliedInFlight": 63.96
+      }
+    ],
+    "meanPerS": 1362.7,
+    "spreadPct": 8
+  }
+}

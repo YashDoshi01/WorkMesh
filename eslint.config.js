@@ -16,7 +16,7 @@ export default defineConfig(
   },
   {
     // Test helpers read untyped JSON responses.
-    files: ["tests/**/*.ts"],
+    files: ["tests/**/*.ts", "bench/**/*.ts"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
 );

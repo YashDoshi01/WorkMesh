@@ -32,7 +32,12 @@ x-api: &api
     TRUST_PROXY: ${GATEWAY_SUBNET_PREFIX:-172.28.57}.10
     SHUTDOWN_DRAIN_MS: "3000"
     SHUTDOWN_GRACE_MS: "20000"
-    DB_POOL_MAX: "10"
+    DB_POOL_MAX: ${DB_POOL_MAX:-10}
+    # Optional tuning (defaults match the application defaults). The benchmark harness shortens
+    # these to make recovery experiments fast; normal use never needs to set them.
+    LEASE_MS: ${LEASE_MS:-30000}
+    REAPER_INTERVAL_MS: ${REAPER_INTERVAL_MS:-5000}
+    RETRY_BASE_MS: ${RETRY_BASE_MS:-1000}
   healthcheck:
     test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/readyz"]
     interval: 3s
@@ -82,7 +87,8 @@ services:
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # GATEWAY_NGINX_CONF lets the benchmark swap in a copy with the rate limits lifted.
+      - ${GATEWAY_NGINX_CONF:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
       # The built dashboard (npm run build:dashboard); served under /dashboard/.
       - ../apps/dashboard/dist:/usr/share/nginx/html/dashboard:ro

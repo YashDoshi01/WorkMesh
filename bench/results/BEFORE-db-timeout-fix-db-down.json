@@ -1,0 +1,348 @@
+{
+  "scenario": "db-down",
+  "environment": {
+    "capturedAt": "2026-11-01T19:24:35.240Z",
+    "host": {
+      "os": "Windows_NT 10.0.26200",
+      "cpu": "AMD Ryzen 5 5600H with Radeon Graphics",
+      "logicalCores": 12,
+      "memoryGiB": 15.3,
+      "node": "v24.14.1"
+    },
+    "docker": {
+      "engine": "29.9.2",
+      "vmCpus": 12,
+      "vmMemoryGiB": 7.4
+    },
+    "topology": "load generator, NGINX, 2 API containers, PostgreSQL 17.6 and workers all on this one machine; the load generator competes for the same CPUs",
+    "images": {
+      "nginx": "nginx:1.28-alpine",
+      "postgres": "postgres:17.6-alpine",
+      "api": "node:24.14.1-alpine3.22 + tsx (TypeScript run directly)"
+    },
+    "apiConfig": {
+      "dbPoolMax": 10,
+      "instances": 2,
+      "nodeEnv": "development"
+    }
+  },
+  "stackSettings": {
+    "LEASE_MS": "6000",
+    "REAPER_INTERVAL_MS": "1000",
+    "RETRY_BASE_MS": "2000"
+  },
+  "wallSeconds": 43,
+  "result": {
+    "events": [
+      {
+        "atS": 5,
+        "event": "docker stop postgres"
+      },
+      {
+        "atS": 5.51,
+        "event": "postgres stopped"
+      },
+      {
+        "atS": 15.03,
+        "event": "docker start postgres"
+      },
+      {
+        "atS": 15.39,
+        "event": "start returned"
+      }
+    ],
+    "apiState": {
+      "api-1": {
+        "state": "running",
+        "restarts": 0,
+        "exitCode": 0
+      },
+      "api-2": {
+        "state": "running",
+        "restarts": 0,
+        "exitCode": 0
+      }
+    },
+    "acknowledged": 1832,
+    "acknowledgedButLost": 0,
+    "firstSuccessfulSubmitSecond": 16,
+    "databaseStartIssuedAtS": 15,
+    "databaseStopIssuedAtS": 5,
+    "successLatency": {
+      "n": 1832,
+      "meanMs": 31.08,
+      "p50Ms": 5.98,
+      "p95Ms": 8.57,
+      "p99Ms": 11.25,
+      "maxMs": 11358.21
+    },
+    "failureLatency": {
+      "n": 8,
+      "meanMs": 5.26,
+      "p50Ms": 4.44,
+      "p95Ms": 6.6,
+      "p99Ms": 6.6,
+      "maxMs": 6.6
+    },
+    "failedRequests": 8,
+    "allAcknowledgedJobsFinished": true,
+    "finalJobStatuses": "succeeded:1832",
+    "perSecond": [
+      {
+        "201": 60,
+        "sec": 0
+      },
+      {
+        "201": 64,
+        "sec": 1
+      },
+      {
+        "201": 64,
+        "sec": 2
+      },
+      {
+        "201": 68,
+        "sec": 3
+      },
+      {
+        "201": 64,
+        "sec": 4
+      },
+      {
+        "201": 12,
+        "500": 8,
+        "sec": 5
+      },
+      {
+        "201": 20,
+        "sec": 16
+      },
+      {
+        "201": 64,
+        "sec": 17
+      },
+      {
+        "201": 64,
+        "sec": 18
+      },
+      {
+        "201": 64,
+        "sec": 19
+      },
+      {
+        "201": 64,
+        "sec": 20
+      },
+      {
+        "201": 68,
+        "sec": 21
+      },
+      {
+        "201": 64,
+        "sec": 22
+      },
+      {
+        "201": 64,
+        "sec": 23
+      },
+      {
+        "201": 64,
+        "sec": 24
+      },
+      {
+        "201": 64,
+        "sec": 25
+      },
+      {
+        "201": 64,
+        "sec": 26
+      },
+      {
+        "201": 64,
+        "sec": 27
+      },
+      {
+        "201": 64,
+        "sec": 28
+      },
+      {
+        "201": 64,
+        "sec": 29
+      },
+      {
+        "201": 64,
+        "sec": 30
+      },
+      {
+        "201": 64,
+        "sec": 31
+      },
+      {
+        "201": 64,
+        "sec": 32
+      },
+      {
+        "201": 68,
+        "sec": 33
+      },
+      {
+        "201": 64,
+        "sec": 34
+      },
+      {
+        "201": 64,
+        "sec": 35
+      },
+      {
+        "201": 64,
+        "sec": 36
+      },
+      {
+        "201": 64,
+        "sec": 37
+      },
+      {
+        "201": 64,
+        "sec": 38
+      },
+      {
+        "201": 60,
+        "sec": 39
+      },
+      {
+        "201": 4,
+        "sec": 40
+      }
+    ],
+    "readyz": [
+      {
+        "atS": 0,
+        "status": 200
+      },
+      {
+        "atS": 1,
+        "status": 200
+      },
+      {
+        "atS": 2,
+        "status": 200
+      },
+      {
+        "atS": 3,
+        "status": 200
+      },
+      {
+        "atS": 4,
+        "status": 200
+      },
+      {
+        "atS": 5.1,
+        "status": 200
+      },
+      {
+        "atS": 10.1,
+        "status": 503
+      },
+      {
+        "atS": 15.1,
+        "status": 503
+      },
+      {
+        "atS": 16.1,
+        "status": 200
+      },
+      {
+        "atS": 17.1,
+        "status": 200
+      },
+      {
+        "atS": 18.1,
+        "status": 200
+      },
+      {
+        "atS": 19.1,
+        "status": 200
+      },
+      {
+        "atS": 20.1,
+        "status": 200
+      },
+      {
+        "atS": 21.1,
+        "status": 200
+      },
+      {
+        "atS": 22.1,
+        "status": 200
+      },
+      {
+        "atS": 23.2,
+        "status": 200
+      },
+      {
+        "atS": 24.2,
+        "status": 200
+      },
+      {
+        "atS": 25.2,
+        "status": 200
+      },
+      {
+        "atS": 26.2,
+        "status": 200
+      },
+      {
+        "atS": 27.2,
+        "status": 200
+      },
+      {
+        "atS": 28.2,
+        "status": 200
+      },
+      {
+        "atS": 29.2,
+        "status": 200
+      },
+      {
+        "atS": 30.2,
+        "status": 200
+      },
+      {
+        "atS": 31.2,
+        "status": 200
+      },
+      {
+        "atS": 32.2,
+        "status": 200
+      },
+      {
+        "atS": 33.3,
+        "status": 200
+      },
+      {
+        "atS": 34.3,
+        "status": 200
+      },
+      {
+        "atS": 35.3,
+        "status": 200
+      },
+      {
+        "atS": 36.3,
+        "status": 200
+      },
+      {
+        "atS": 37.3,
+        "status": 200
+      },
+      {
+        "atS": 38.3,
+        "status": 200
+      },
+      {
+        "atS": 39.3,
+        "status": 200
+      }
+    ]
+  }
+}
