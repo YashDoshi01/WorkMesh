@@ -12,6 +12,8 @@ export interface Schedule {
   priority: number;
   maxAttempts: number;
   enabled: boolean;
+  /** Why the scheduler disabled this schedule, if it did. Cleared when re-enabled. */
+  lastError: string | null;
   /** The next occurrence that has not been turned into a job yet. */
   nextRunAt: string;
   lastRunAt: string | null;
@@ -29,6 +31,7 @@ interface ScheduleRow {
   priority: number;
   max_attempts: number;
   enabled: boolean;
+  last_error: string | null;
   next_run_at: Date;
   last_run_at: Date | null;
   created_at: Date;
@@ -36,7 +39,7 @@ interface ScheduleRow {
 }
 
 const COLUMNS =
-  "id, name, cron, timezone, job_type, payload, priority, max_attempts, enabled, next_run_at, last_run_at, created_at, updated_at";
+  "id, name, cron, timezone, job_type, payload, priority, max_attempts, enabled, last_error, next_run_at, last_run_at, created_at, updated_at";
 
 function toSchedule(r: ScheduleRow): Schedule {
   return {
@@ -49,6 +52,7 @@ function toSchedule(r: ScheduleRow): Schedule {
     priority: r.priority,
     maxAttempts: r.max_attempts,
     enabled: r.enabled,
+    lastError: r.last_error,
     nextRunAt: r.next_run_at.toISOString(),
     lastRunAt: r.last_run_at?.toISOString() ?? null,
     createdAt: r.created_at.toISOString(),
@@ -121,7 +125,7 @@ export class ScheduleRepository {
       ? nextOccurrenceAfter(current.cron, current.timezone, await this.dbNow())
       : new Date(current.nextRunAt);
     const r = await this.db.query<ScheduleRow>(
-      `UPDATE schedules SET enabled = $2, next_run_at = $3, updated_at = now()
+      `UPDATE schedules SET enabled = $2, next_run_at = $3, last_error = NULL, updated_at = now()
        WHERE id = $1 RETURNING ${COLUMNS}`,
       [id, enabled, next],
     );

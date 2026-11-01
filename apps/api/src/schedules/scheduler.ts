@@ -1,4 +1,5 @@
-import { logInfo, logWarn } from "@workmesh/shared";
+import { logError, logInfo, logWarn } from "@workmesh/shared";
+import { isTransientDbError } from "../db/errors.js";
 import type { Db } from "../db/pool.js";
 import { PeriodicTask } from "../util/periodic.js";
 import { latestOccurrenceAtOrBefore, nextOccurrenceAfter } from "./cron.js";
@@ -12,6 +13,8 @@ export interface ScheduledRun {
   jobId: string | null;
   /** True if earlier occurrences were skipped (the scheduler was down or behind). */
   skippedEarlier: boolean;
+  /** Set when this schedule could not be processed and was disabled; no job was created. */
+  error: string | null;
 }
 
 interface DueRow {
@@ -39,6 +42,10 @@ const BATCH_SIZE = 100;
  *      (which would create a duplicate next tick) or the reverse (a lost occurrence).
  *   3. The INSERT is also protected by a unique index on (schedule_id, scheduled_for),
  *      so even a bug in steps 1-2 cannot create two jobs for one occurrence.
+ *
+ * Isolation: each schedule runs under its own SAVEPOINT. A schedule that fails for a reason
+ * about its own data is disabled with the error recorded (`last_error`) and the rest of the
+ * batch proceeds; a transient database error aborts the tick instead (retried next interval).
  *
  * Missed runs: if the scheduler was down and several occurrences are overdue, only the LATEST
  * one becomes a job; earlier ones are skipped. A burst of 100 stale "daily report" jobs after
@@ -76,38 +83,64 @@ export class Scheduler {
         [now, BATCH_SIZE],
       );
       for (const s of due.rows) {
-        // latestOccurrenceAtOrBefore can in principle land before next_run_at (e.g. the
-        // expression was edited by hand); never go backwards.
-        const latest = latestOccurrenceAtOrBefore(s.cron, s.timezone, now);
-        const occurrence = latest.getTime() >= s.next_run_at.getTime() ? latest : s.next_run_at;
-        const inserted = await client.query<{ id: string }>(
-          `INSERT INTO jobs
-             (type, payload, priority, max_attempts, run_at, scheduled_for, schedule_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL DO NOTHING
-           RETURNING id`,
-          [
-            s.job_type,
-            JSON.stringify(s.payload),
-            s.priority,
-            s.max_attempts,
-            now,
+        // Each schedule gets its own savepoint: if THIS one is broken (bad cron after a hand
+        // edit, a rejected insert), only its work is undone and the others in the batch still run.
+        await client.query("SAVEPOINT one_schedule");
+        try {
+          // latestOccurrenceAtOrBefore can in principle land before next_run_at (e.g. the
+          // expression was edited by hand); never go backwards.
+          const latest = latestOccurrenceAtOrBefore(s.cron, s.timezone, now);
+          const occurrence = latest.getTime() >= s.next_run_at.getTime() ? latest : s.next_run_at;
+          const inserted = await client.query<{ id: string }>(
+            `INSERT INTO jobs
+               (type, payload, priority, max_attempts, run_at, scheduled_for, schedule_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL DO NOTHING
+             RETURNING id`,
+            [
+              s.job_type,
+              JSON.stringify(s.payload),
+              s.priority,
+              s.max_attempts,
+              now,
+              occurrence,
+              s.id,
+            ],
+          );
+          await client.query(
+            `UPDATE schedules SET next_run_at = $2, last_run_at = $3, updated_at = now()
+             WHERE id = $1`,
+            [s.id, nextOccurrenceAfter(s.cron, s.timezone, now), occurrence],
+          );
+          await client.query("RELEASE SAVEPOINT one_schedule");
+          runs.push({
+            scheduleId: s.id,
+            name: s.name,
             occurrence,
-            s.id,
-          ],
-        );
-        await client.query(
-          `UPDATE schedules SET next_run_at = $2, last_run_at = $3, updated_at = now()
-           WHERE id = $1`,
-          [s.id, nextOccurrenceAfter(s.cron, s.timezone, now), occurrence],
-        );
-        runs.push({
-          scheduleId: s.id,
-          name: s.name,
-          occurrence,
-          jobId: inserted.rows[0]?.id ?? null,
-          skippedEarlier: occurrence.getTime() > s.next_run_at.getTime(),
-        });
+            jobId: inserted.rows[0]?.id ?? null,
+            skippedEarlier: occurrence.getTime() > s.next_run_at.getTime(),
+            error: null,
+          });
+        } catch (err) {
+          // A flaky database must not disable healthy schedules: let the tick fail and retry.
+          if (isTransientDbError(err)) throw err;
+          const message = (err instanceof Error ? err.message : String(err)).slice(0, 500);
+          await client.query("ROLLBACK TO SAVEPOINT one_schedule");
+          await client.query(
+            `UPDATE schedules SET enabled = false, last_error = $2, updated_at = now()
+             WHERE id = $1`,
+            [s.id, message],
+          );
+          await client.query("RELEASE SAVEPOINT one_schedule");
+          runs.push({
+            scheduleId: s.id,
+            name: s.name,
+            occurrence: s.next_run_at,
+            jobId: null,
+            skippedEarlier: false,
+            error: message,
+          });
+        }
       }
       await client.query("COMMIT");
     } catch (err) {
@@ -123,6 +156,10 @@ export class Scheduler {
         occurrence: r.occurrence.toISOString(),
         jobId: r.jobId,
       };
+      if (r.error) {
+        logError("schedule_disabled_after_error", { ...fields, error: r.error });
+        continue;
+      }
       if (r.skippedEarlier) logWarn("schedule_missed_occurrences_skipped", fields);
       if (r.jobId) logInfo("schedule_job_created", fields);
       else logWarn("schedule_occurrence_already_exists", fields);

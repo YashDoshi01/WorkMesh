@@ -434,7 +434,7 @@ describe("delays, priority + aging, schedules, scheduler (PostgreSQL)", () => {
         assert.equal(await nextOf(s.id), "2026-01-01T10:05:00.000Z", "and it still moved on");
       });
 
-      it("a tick is all-or-nothing: if one job insert fails, NOTHING from that tick is kept", async () => {
+      it("a broken schedule is isolated: it is disabled with its error, the others still run", async () => {
         await db.query(`
           CREATE OR REPLACE FUNCTION reject_boom() RETURNS trigger AS $$
           BEGIN IF NEW.type = 'boom.job' THEN RAISE EXCEPTION 'boom'; END IF; RETURN NEW; END
@@ -443,15 +443,61 @@ describe("delays, priority + aging, schedules, scheduler (PostgreSQL)", () => {
           "CREATE TRIGGER reject_boom BEFORE INSERT ON jobs FOR EACH ROW EXECUTE FUNCTION reject_boom()",
         );
         try {
-          const good = await makeSchedule({ name: "a-good" }, "2026-01-01T10:00:00Z");
-          await makeSchedule({ name: "z-boom", jobType: "boom.job" }, "2026-01-01T10:00:30Z");
-          await assert.rejects(scheduler.runOnce(T("2026-01-01T10:01:00Z")), /boom/);
-          assert.equal((await jobsOf(good.id)).length, 0, "the good job was rolled back too");
-          assert.equal(await nextOf(good.id), "2026-01-01T10:00:00.000Z", "schedule not advanced");
+          // 'a-good' sorts before AND after the broken one by next_run_at, to prove order is irrelevant
+          const early = await makeSchedule({ name: "a-early" }, "2026-01-01T09:00:00Z");
+          const bad = await makeSchedule(
+            { name: "m-boom", jobType: "boom.job" },
+            "2026-01-01T10:00:00Z",
+          );
+          const late = await makeSchedule({ name: "z-late" }, "2026-01-01T11:00:00Z");
+          const runs = await scheduler.runOnce(T("2026-01-01T11:30:00Z"));
+
+          assert.equal((await jobsOf(early.id)).length, 1, "schedule before the broken one ran");
+          assert.equal((await jobsOf(late.id)).length, 1, "schedule AFTER the broken one ran too");
+          assert.equal((await jobsOf(bad.id)).length, 0, "the broken one created nothing");
+          assert.equal(runs.filter((r) => r.error).length, 1);
+
+          const row = (
+            await db.query("SELECT enabled, last_error FROM schedules WHERE id = $1", [bad.id])
+          ).rows[0];
+          assert.equal(row.enabled, false, "disabled so it stops failing every tick");
+          assert.match(row.last_error, /boom/);
+          const shown = (await get(`/schedules/${bad.id}`)).body;
+          assert.equal(shown.enabled, false);
+          assert.match(shown.lastError, /boom/);
+
+          // the scheduler does not retry the disabled schedule on later ticks
+          assert.equal((await scheduler.runOnce(T("2026-01-01T11:31:00Z"))).length, 0);
         } finally {
           await db.query("DROP TRIGGER IF EXISTS reject_boom ON jobs");
           await db.query("DROP FUNCTION IF EXISTS reject_boom()");
         }
+      });
+
+      it("a hand-corrupted cron expression does not block the schedules behind it", async () => {
+        const bad = await makeSchedule({ name: "a-corrupt" }, "2026-01-01T09:00:00Z"); // oldest => picked first
+        const good = await makeSchedule({ name: "b-fine" }, "2026-01-01T10:00:00Z");
+        await db.query("UPDATE schedules SET cron = 'garbage in here now x' WHERE id = $1", [
+          bad.id,
+        ]);
+        await scheduler.runOnce(T("2026-01-01T10:30:00Z"));
+        assert.equal((await jobsOf(good.id)).length, 1);
+        const row = (
+          await db.query("SELECT enabled, last_error FROM schedules WHERE id = $1", [bad.id])
+        ).rows[0];
+        assert.equal(row.enabled, false);
+        assert.match(row.last_error, /./);
+      });
+
+      it("re-enabling clears the recorded error and recomputes the next run", async () => {
+        const s = await makeSchedule({ name: "to-fix" }, "2026-01-01T09:00:00Z");
+        await db.query(
+          "UPDATE schedules SET enabled = false, last_error = 'old problem' WHERE id = $1",
+          [s.id],
+        );
+        const on = await api(started.url, "PATCH", `/schedules/${s.id}`, { enabled: true });
+        assert.equal(on.body.lastError, null);
+        assert.ok(Date.parse(on.body.nextRunAt) > Date.now());
       });
     });
 
@@ -475,8 +521,17 @@ describe("delays, priority + aging, schedules, scheduler (PostgreSQL)", () => {
       await worker.start();
       try {
         await waitFor(async () => ran.length >= 1, "scheduled job to run on a worker", 10_000);
-        const job = (await jobsOf(s.id))[0];
-        assert.equal(job.status, "succeeded");
+        // The handler running is not the same as the result being reported: wait for the real
+        // condition (the handler runs BEFORE the worker's completion report reaches the API).
+        const job = await waitFor(
+          async () => {
+            const first = (await jobsOf(s.id))[0];
+            return first?.status === "succeeded" ? first : false;
+          },
+          "the job to be recorded as succeeded",
+          10_000,
+        );
+        assert.equal(job.schedule_id, s.id);
       } finally {
         await loop.stop();
         await worker.stop();

@@ -6,6 +6,8 @@ import { JobRepository } from "./jobs/repository.js";
 import { jobRoutes } from "./jobs/routes.js";
 import { ScheduleRepository } from "./schedules/repository.js";
 import { scheduleRoutes } from "./schedules/routes.js";
+import { WorkflowRepository } from "./workflows/repository.js";
+import { workflowRoutes } from "./workflows/routes.js";
 import { WorkerRepository } from "./workers/repository.js";
 import { workerRoutes } from "./workers/routes.js";
 
@@ -22,6 +24,7 @@ export function createApp(
   });
   app.use(jobRoutes(new JobRepository(db), lifecycle));
   app.use(scheduleRoutes(new ScheduleRepository(db)));
+  app.use(workflowRoutes(new WorkflowRepository(db)));
   app.use(workerRoutes(new WorkerRepository(db), lifecycle));
   app.use(notFound);
   app.use(errorHandler);

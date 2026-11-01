@@ -3,11 +3,11 @@ import { describe, it } from "node:test";
 import { getRuntimeIdentity, WORKMESH_PHASE } from "@workmesh/api";
 import { WORKMESH_NAME } from "@workmesh/shared";
 
-describe("Phase 4 smoke", () => {
-  it("identifies WorkMesh at phase 4", () => {
+describe("Phase 5 smoke", () => {
+  it("identifies WorkMesh at phase 5", () => {
     const identity = getRuntimeIdentity();
     assert.equal(identity.name, WORKMESH_NAME);
     assert.equal(identity.phase, WORKMESH_PHASE);
-    assert.equal(WORKMESH_PHASE, 4);
+    assert.equal(WORKMESH_PHASE, 5);
   });
 });

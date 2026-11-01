@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 4** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically. There is no workflow engine, dashboard, or auth yet.
+**Current milestone: Phase 5** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. There is no dashboard or auth yet.
 
 ## Architecture (target)
 
@@ -161,3 +161,19 @@ curl -X PATCH localhost:3000/schedules/<id> -H "content-type: application/json" 
 - **If the API was down**, only the latest overdue occurrence runs, not every missed one. Re-enabling a disabled schedule does not catch up.
 - `SCHEDULER_INTERVAL_MS` (default 1000) controls how often each API instance checks for due schedules.
 - Query-plan measurements and how to reproduce them: [`docs/QUERY_PLANS.md`](docs/QUERY_PLANS.md).
+
+## Workflows (Phase 5)
+
+```bash
+curl -X POST localhost:3000/workflows -H "content-type: application/json" -d '{
+  "name": "nightly-report",
+  "nodes": [
+    { "key": "fetch",  "type": "report.build" },
+    { "key": "render", "type": "report.build", "dependsOn": ["fetch"] },
+    { "key": "notify", "type": "email.send", "payload": {"to": "team@example.com"}, "dependsOn": ["render"] }
+  ]}'
+curl localhost:3000/workflows/<id>                      # per-node state + progress
+curl -X POST localhost:3000/workflows/<id>/cancel       # skip what has not started
+```
+
+A node runs only after everything it depends on has **succeeded**; its job does not even exist until then. A cycle is rejected (`dependency cycle: a -> b -> a`). If a node fails for good, everything downstream is skipped while independent branches finish, and the workflow ends `failed`. Cancelling withdraws queued work but lets running jobs finish. Full semantics, limits and what is _not_ provided (e.g. results are not passed between nodes): [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md). No new environment variables.

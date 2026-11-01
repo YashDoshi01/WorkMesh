@@ -4,7 +4,7 @@ export const MAX_PAYLOAD_BYTES = 64 * 1024;
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 20;
 
-export const JOB_STATUSES = ["queued", "running", "succeeded", "failed"] as const;
+export const JOB_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 /** Lowercase dotted/dashed identifier; mirrors the CHECK constraint in the migration. */
@@ -32,6 +32,7 @@ export const listJobsQuerySchema = z.strictObject({
   status: z.enum(JOB_STATUSES).optional(),
   type: jobType.optional(),
   scheduleId: z.uuid().optional(),
+  workflowId: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });

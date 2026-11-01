@@ -1,4 +1,6 @@
 import type { Db } from "../db/pool.js";
+import { withTransaction, type Tx } from "../db/tx.js";
+import { logReconcile, reconcileWorkflow } from "../workflows/reconcile.js";
 import { COLUMNS, toJob, type FinishResult, type Job, type JobRow } from "./repository.js";
 
 export interface LifecycleConfig {
@@ -50,6 +52,37 @@ export class JobLifecycle {
     private readonly db: Db,
     readonly config: LifecycleConfig = DEFAULT_LIFECYCLE_CONFIG,
   ) {}
+
+  /**
+   * Runs a job-state change and, in the SAME transaction, reconciles every workflow the changed
+   * jobs belong to (release newly unblocked nodes, skip doomed ones, withdraw queued jobs of a
+   * cancelled workflow, finish the workflow). Doing both in one transaction is what makes
+   * workflow progress durable: a crash can never leave "job finished but its children not
+   * released". Workflows are reconciled in id order so two transactions touching the same
+   * workflows lock them in the same order and cannot deadlock.
+   */
+  private async changeAndReconcile(change: (tx: Tx) => Promise<JobRow[]>): Promise<JobRow[]> {
+    const { rows, summaries } = await withTransaction(this.db, async (tx) => {
+      const changed = await change(tx);
+      const workflowIds = [
+        ...new Set(changed.map((r) => r.workflow_id).filter((id): id is string => id !== null)),
+      ].sort();
+      const summaries = [];
+      for (const id of workflowIds) summaries.push(await reconcileWorkflow(tx, id));
+      if (workflowIds.length === 0) return { rows: changed, summaries };
+      // Reconciling can change the very jobs we just changed (a job queued for retry in a
+      // cancelled workflow is cancelled). Re-read them so the caller reports what is true now,
+      // not the intermediate state.
+      const fresh = await tx.query<JobRow>(
+        `SELECT ${COLUMNS} FROM jobs WHERE id = ANY($1::uuid[])`,
+        [changed.map((r) => r.id)],
+      );
+      const byId = new Map(fresh.rows.map((r) => [r.id, r] as const));
+      return { rows: changed.map((r) => byId.get(r.id) ?? r), summaries };
+    });
+    summaries.forEach(logReconcile);
+    return rows;
+  }
 
   /**
    * Atomically hands up to `limit` eligible jobs to one worker, best rank first
@@ -129,14 +162,35 @@ export class JobLifecycle {
     return row ? { outcome: "ok", job: toJob(row) } : this.notOwner(id);
   }
 
+  /**
+   * Applies a completion or failure. Most jobs are NOT in a workflow, and for them one bare
+   * statement is already atomic and costs a single round trip. So try that first, restricted to
+   * jobs with no workflow. Only if it matches nothing (a workflow job, or a report that is a
+   * replay or from a stale owner) fall back to the transactional path, which also reconciles the
+   * job's workflow in the same transaction. Measured: wrapping every completion in a transaction
+   * cost about +1.2 ms on a 1.9 ms operation (BEGIN and COMMIT are two extra round trips).
+   */
+  private async finishJob(
+    sql: (plainJobsOnly: boolean) => string,
+    params: unknown[],
+  ): Promise<JobRow | undefined> {
+    const fast = await this.db.query<JobRow>(sql(true), params);
+    if (fast.rows[0]) return fast.rows[0];
+    const rows = await this.changeAndReconcile(
+      async (tx) => (await tx.query<JobRow>(sql(false), params)).rows,
+    );
+    return rows[0];
+  }
+
   /** Marks the attempt succeeded. Repeating the same report is a harmless no-op (200). */
   async complete(id: string, workerId: string, attempt: number): Promise<FinishResult> {
-    const result = await this.db.query<JobRow>(
-      `WITH done AS (
+    const row = await this.finishJob(
+      (plain) => `WITH done AS (
          UPDATE jobs
          SET status = 'succeeded', finished_at = now(), lease_expires_at = NULL,
              last_error = NULL, updated_at = now()
          WHERE id = $1 AND status = 'running' AND claimed_by = $2 AND attempt_count = $3
+           ${plain ? "AND workflow_id IS NULL" : ""}
          RETURNING ${COLUMNS}
        ),
        recorded AS (
@@ -148,7 +202,6 @@ export class JobLifecycle {
        SELECT ${COLUMNS} FROM done`,
       [id, workerId, attempt],
     );
-    const row = result.rows[0];
     return row
       ? { outcome: "ok", job: toJob(row) }
       : this.replayOrReject(id, workerId, attempt, "succeeded");
@@ -167,8 +220,8 @@ export class JobLifecycle {
     retryable: boolean,
   ): Promise<FinishResult> {
     const retry = `($5::boolean AND attempt_count < max_attempts)`;
-    const result = await this.db.query<JobRow>(
-      `WITH failed AS (
+    const row = await this.finishJob(
+      (plain) => `WITH failed AS (
          UPDATE jobs
          SET status = CASE WHEN ${retry} THEN 'queued' ELSE 'failed' END,
              run_at = CASE WHEN ${retry} THEN now() + ${backoffInterval("$6", "$7")} ELSE run_at END,
@@ -176,6 +229,7 @@ export class JobLifecycle {
              finished_at = CASE WHEN ${retry} THEN NULL ELSE now() END,
              last_error = $4, lease_expires_at = NULL, updated_at = now()
          WHERE id = $1 AND status = 'running' AND claimed_by = $2 AND attempt_count = $3
+           ${plain ? "AND workflow_id IS NULL" : ""}
          RETURNING ${COLUMNS}
        ),
        recorded AS (
@@ -187,7 +241,6 @@ export class JobLifecycle {
        SELECT ${COLUMNS} FROM failed`,
       [id, workerId, attempt, error, retryable, this.config.retryBaseMs, this.config.retryMaxMs],
     );
-    const row = result.rows[0];
     return row
       ? { outcome: "ok", job: toJob(row) }
       : this.replayOrReject(id, workerId, attempt, "failed");
@@ -201,8 +254,11 @@ export class JobLifecycle {
    */
   async recoverExpired(batchSize = 100): Promise<Job[]> {
     const retry = `attempt_count < max_attempts`;
-    const result = await this.db.query<JobRow>(
-      `WITH expired AS (
+    const rows = await this.changeAndReconcile(
+      async (tx) =>
+        (
+          await tx.query<JobRow>(
+            `WITH expired AS (
          SELECT id AS eid FROM jobs
          WHERE status = 'running' AND lease_expires_at < now()
          ORDER BY lease_expires_at
@@ -228,9 +284,11 @@ export class JobLifecycle {
          WHERE job_attempts.job_id = recovered.id AND job_attempts.attempt_number = recovered.attempt_count
        )
        SELECT ${COLUMNS} FROM recovered`,
-      [batchSize, this.config.retryBaseMs, this.config.retryMaxMs],
+            [batchSize, this.config.retryBaseMs, this.config.retryMaxMs],
+          )
+        ).rows,
     );
-    return result.rows.map(toJob);
+    return rows.map(toJob);
   }
 
   async attempts(jobId: string): Promise<JobAttempt[] | null> {

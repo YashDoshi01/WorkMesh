@@ -36,7 +36,7 @@ export async function setupTestDb(): Promise<Db> {
 }
 
 export async function resetTables(db: Db): Promise<void> {
-  await db.query("TRUNCATE jobs, workers, schedules CASCADE");
+  await db.query("TRUNCATE jobs, workers, schedules, workflows CASCADE");
 }
 
 export interface Started {

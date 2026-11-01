@@ -12,6 +12,8 @@ export interface Job {
   scheduledFor: string;
   /** The recurring schedule that created this job, if any. */
   scheduleId: string | null;
+  /** The workflow this job is a node of, if any. */
+  workflowId: string | null;
   attemptCount: number;
   maxAttempts: number;
   leaseExpiresAt: string | null;
@@ -32,6 +34,7 @@ export interface JobRow {
   run_at: Date;
   scheduled_for: Date;
   schedule_id: string | null;
+  workflow_id: string | null;
   attempt_count: number;
   max_attempts: number;
   lease_expires_at: Date | null;
@@ -44,7 +47,7 @@ export interface JobRow {
 }
 
 export const COLUMNS =
-  "id, type, payload, status, priority, run_at, scheduled_for, schedule_id, attempt_count, max_attempts, lease_expires_at, claimed_by, started_at, finished_at, last_error, created_at, updated_at";
+  "id, type, payload, status, priority, run_at, scheduled_for, schedule_id, workflow_id, attempt_count, max_attempts, lease_expires_at, claimed_by, started_at, finished_at, last_error, created_at, updated_at";
 
 // Postgres timestamps have microsecond precision; JS Dates only milliseconds.
 // The pagination cursor must keep full precision or rows could be skipped/repeated.
@@ -60,6 +63,7 @@ export function toJob(row: JobRow): Job {
     runAt: row.run_at.toISOString(),
     scheduledFor: row.scheduled_for.toISOString(),
     scheduleId: row.schedule_id,
+    workflowId: row.workflow_id,
     attemptCount: row.attempt_count,
     maxAttempts: row.max_attempts,
     leaseExpiresAt: row.lease_expires_at?.toISOString() ?? null,
@@ -139,6 +143,7 @@ export class JobRepository {
     status?: JobStatus | undefined;
     type?: string | undefined;
     scheduleId?: string | undefined;
+    workflowId?: string | undefined;
     limit: number;
     cursor?: string | undefined;
   }): Promise<JobPage> {
@@ -155,6 +160,10 @@ export class JobRepository {
     if (filter.scheduleId) {
       params.push(filter.scheduleId);
       where.push(`schedule_id = $${params.length}`);
+    }
+    if (filter.workflowId) {
+      params.push(filter.workflowId);
+      where.push(`workflow_id = $${params.length}`);
     }
     if (filter.cursor) {
       const [ts, id] = decodeCursor(filter.cursor);

@@ -1,6 +1,6 @@
 import { WORKMESH_NAME } from "@workmesh/shared";
 
-export const WORKMESH_PHASE = 4 as const;
+export const WORKMESH_PHASE = 5 as const;
 
 export function getRuntimeIdentity(): { name: string; phase: number } {
   return { name: WORKMESH_NAME, phase: WORKMESH_PHASE };
@@ -20,3 +20,6 @@ export {
   latestOccurrenceAtOrBefore,
   nextOccurrenceAfter,
 } from "./schedules/cron.js";
+export { WorkflowRepository } from "./workflows/repository.js";
+export { reconcileWorkflow } from "./workflows/reconcile.js";
+export { withTransaction } from "./db/tx.js";
