@@ -1,6 +1,6 @@
 import { WORKMESH_NAME } from "@workmesh/shared";
 
-export const WORKMESH_PHASE = 1 as const;
+export const WORKMESH_PHASE = 2 as const;
 
 export function getRuntimeIdentity(): { name: string; phase: number } {
   return { name: WORKMESH_NAME, phase: WORKMESH_PHASE };

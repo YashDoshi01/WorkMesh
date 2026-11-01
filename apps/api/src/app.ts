@@ -3,6 +3,8 @@ import type { Db } from "./db/pool.js";
 import { errorHandler, notFound, requestContext } from "./http/middleware.js";
 import { JobRepository } from "./jobs/repository.js";
 import { jobRoutes } from "./jobs/routes.js";
+import { WorkerRepository } from "./workers/repository.js";
+import { workerRoutes } from "./workers/routes.js";
 
 export function createApp(db: Db): Express {
   const app = express();
@@ -12,7 +14,9 @@ export function createApp(db: Db): Express {
   app.get("/healthz", (_req, res) => {
     res.json({ status: "ok" });
   });
-  app.use(jobRoutes(new JobRepository(db)));
+  const jobs = new JobRepository(db);
+  app.use(jobRoutes(jobs));
+  app.use(workerRoutes(new WorkerRepository(db), jobs));
   app.use(notFound);
   app.use(errorHandler);
   return app;

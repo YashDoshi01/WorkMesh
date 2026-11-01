@@ -209,7 +209,7 @@ describe("jobs API (PostgreSQL)", () => {
     });
 
     it("rejects out-of-range limits, unknown statuses and garbage cursors", async () => {
-      for (const qs of ["limit=1000", "limit=0", "status=running", "cursor=garbage"]) {
+      for (const qs of ["limit=1000", "limit=0", "status=bogus", "cursor=garbage"]) {
         const res = await fetch(`${started.url}/jobs?${qs}`);
         assert.equal(res.status, 400, qs);
       }

@@ -4,11 +4,11 @@ export const MAX_PAYLOAD_BYTES = 64 * 1024;
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 20;
 
-export const JOB_STATUSES = ["queued"] as const;
+export const JOB_STATUSES = ["queued", "running", "succeeded", "failed"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 /** Lowercase dotted/dashed identifier; mirrors the CHECK constraint in the migration. */
-const jobType = z
+export const jobType = z
   .string()
   .regex(
     /^[a-z0-9][a-z0-9._-]{0,99}$/,

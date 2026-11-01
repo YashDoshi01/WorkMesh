@@ -7,5 +7,18 @@
     "types": ["node"]
   },
   "include": ["./**/*.ts"],
-  "references": [{ "path": "../packages/shared" }, { "path": "../apps/api" }]
+  "references": [
+    {
+      "path": "../packages/shared"
+    },
+    {
+      "path": "../packages/worker-sdk"
+    },
+    {
+      "path": "../apps/api"
+    },
+    {
+      "path": "../apps/sample-worker"
+    }
+  ]
 }

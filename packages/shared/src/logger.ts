@@ -1,6 +1,6 @@
 export type LogFields = Record<string, unknown>;
 
-function write(level: "info" | "error", message: string, fields?: LogFields): void {
+function write(level: "info" | "warn" | "error", message: string, fields?: LogFields): void {
   const record = {
     level,
     msg: message,
@@ -12,6 +12,10 @@ function write(level: "info" | "error", message: string, fields?: LogFields): vo
     console.error(line);
     return;
   }
+  if (level === "warn") {
+    console.warn(line);
+    return;
+  }
   console.log(line);
 }
 
@@ -21,4 +25,8 @@ export function logInfo(message: string, fields?: LogFields): void {
 
 export function logError(message: string, fields?: LogFields): void {
   write("error", message, fields);
+}
+
+export function logWarn(message: string, fields?: LogFields): void {
+  write("warn", message, fields);
 }

@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 1** — durable job submission API (`POST /jobs`, `GET /jobs/:id`, `GET /jobs`) backed by PostgreSQL. There is no worker, SDK, or dashboard yet; jobs stay `queued`.
+**Current milestone: Phase 2** — jobs are submitted over HTTP (Phase 1) and executed by a separate worker process built with the Worker SDK. There is no retry/lease recovery, dashboard, or auth yet.
 
 ## Architecture (target)
 
@@ -57,6 +57,7 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 | `npm run format:check`     | Prettier check                                                           |
 | `npm test`                 | Unit tests (`node:test` via `tsx`)                                       |
 | `npm run test:integration` | Integration tests (needs `npm run db:up`; uses database `workmesh_test`) |
+| `npm run dev:worker`       | Run the sample worker (needs the API running)                            |
 | `npm run dev:api`          | Run the API (applies migrations on start)                                |
 | `npm run db:up`            | Start PostgreSQL                                                         |
 | `npm run db:down`          | Stop PostgreSQL                                                          |
@@ -104,3 +105,28 @@ curl "localhost:3000/jobs?status=queued&type=email.send&limit=20&cursor=<nextCur
 ```
 
 Rules: `type` matches `^[a-z0-9][a-z0-9._-]{0,99}$`; `payload` is a JSON object up to 64 KiB; `priority` 0-100 (default 0); optional `runAt` ISO-8601 timestamp (stored, not yet acted on). Errors: `{ "error": { "code", "message", "details?", "requestId" } }`.
+
+## Running a worker (Phase 2)
+
+In two terminals (after `npm run db:up`):
+
+```bash
+npm run dev:api      # terminal 1
+npm run dev:worker   # terminal 2: sample worker with email.send and report.build handlers
+curl -X POST localhost:3000/jobs -H "content-type: application/json" \
+  -d '{"type":"email.send","payload":{"to":"a@b.c"}}'
+curl localhost:3000/jobs      # status goes queued -> running -> succeeded
+```
+
+`{"type":"report.build","payload":{"shouldFail":true}}` ends as `failed` with `lastError` set. Writing your own worker:
+
+```ts
+import { Worker } from "@workmesh/worker-sdk";
+const worker = new Worker({ apiUrl: "http://localhost:3000", concurrency: 4 });
+worker.register("email.send", async (job) => {
+  /* your code */
+});
+await worker.start(); // later: await worker.stop() for a graceful shutdown
+```
+
+Known limitation: if a worker crashes mid-job, that job stays `running` until Phase 3 adds leases.

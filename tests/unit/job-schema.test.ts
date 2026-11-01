@@ -39,6 +39,6 @@ describe("listJobsQuerySchema", () => {
   });
 
   it("rejects unknown statuses", () => {
-    assert.equal(listJobsQuerySchema.safeParse({ status: "running" }).success, false);
+    assert.equal(listJobsQuerySchema.safeParse({ status: "bogus" }).success, false);
   });
 });

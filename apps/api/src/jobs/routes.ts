@@ -1,19 +1,8 @@
 import { Router } from "express";
-import type { ZodType } from "zod";
 import { HttpError } from "../http/errors.js";
+import { parse } from "../http/validate.js";
 import { InvalidCursorError, type JobRepository } from "./repository.js";
 import { createJobSchema, jobIdSchema, listJobsQuerySchema } from "./schema.js";
-
-function parse<T>(schema: ZodType<T>, value: unknown, what: string): T {
-  const result = schema.safeParse(value);
-  if (result.success) return result.data;
-  throw new HttpError(
-    400,
-    "validation_error",
-    `Invalid ${what}`,
-    result.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
-  );
-}
 
 export function jobRoutes(jobs: JobRepository): Router {
   const router = Router();
