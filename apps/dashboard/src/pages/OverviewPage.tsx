@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import type { Stats } from "../api/schemas";
 import { useSession } from "../auth/auth";
 import { PageHeader, Time } from "../components/bits";
@@ -47,8 +48,52 @@ function Distribution({ title, d }: { title: string; d: Stats["window"]["executi
   );
 }
 
+/** Shown to a brand-new organisation, until its first job or worker appears. */
+function GetStarted({ canOperate }: { canOperate: boolean }) {
+  return (
+    <section className="card" aria-labelledby="start-h" style={{ marginBottom: 18 }}>
+      <h2 id="start-h">Get started</h2>
+      <p className="muted">Three steps to your first job:</p>
+      <ol className="steps">
+        <li>
+          <span className="n" aria-hidden="true">
+            1
+          </span>
+          <div>
+            <h3>
+              <Link to="/keys">Create API keys</Link>
+            </h3>
+            <p>A client key for your app and a worker key for your worker.</p>
+          </div>
+        </li>
+        <li>
+          <span className="n" aria-hidden="true">
+            2
+          </span>
+          <div>
+            <h3>Run a worker</h3>
+            <p>
+              Start a worker with your worker key as <code>WORKMESH_API_KEY</code>. It appears under{" "}
+              <Link to="/workers">Workers</Link>.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span className="n" aria-hidden="true">
+            3
+          </span>
+          <div>
+            <h3>{canOperate ? <Link to="/submit">Submit a job</Link> : "Submit a job"}</h3>
+            <p>Send one from your app, or submit a test job from the dashboard.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+  );
+}
+
 export function OverviewPage() {
-  const { api } = useSession();
+  const { api, canOperate } = useSession();
   const [windowMinutes, setWindowMinutes] = useState(60);
   const stats = useResource(`stats:${windowMinutes}`, (s) => api.stats(windowMinutes, s), {
     intervalMs: 5000,
@@ -77,8 +122,13 @@ export function OverviewPage() {
       <DataView resource={stats} what="statistics">
         {(s) => {
           const finished = s.window.succeeded + s.window.failed;
+          const brandNew =
+            s.workers.alive + s.workers.stale === 0 &&
+            s.queue.queued + s.queue.running === 0 &&
+            finished + s.window.cancelled === 0;
           return (
             <>
+              {brandNew ? <GetStarted canOperate={canOperate} /> : null}
               <p className="muted small">
                 Updated <Time iso={s.generatedAt} relative /> · refreshes every 5 seconds
               </p>

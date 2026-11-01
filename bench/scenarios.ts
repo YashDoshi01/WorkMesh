@@ -25,7 +25,15 @@ function row(r: LoadResult): string {
 }
 
 /** A fast submitter: one POST /jobs per call, returns the HTTP status. */
-function submitter(stack: Stack, extra: (i: number) => Record<string, unknown> = () => ({})) {
+const keyHeader = (key: string | undefined): Record<string, string> =>
+  key === undefined ? {} : { "idempotency-key": key };
+
+function submitter(
+  stack: Stack,
+  extra: (i: number) => Record<string, unknown> = () => ({}),
+  /** Returns an Idempotency-Key for request number i (or undefined for none). */
+  idempotencyKey: (i: number) => string | undefined = () => undefined,
+) {
   const headers = {
     authorization: `Bearer ${stack.clientKey}`,
     "content-type": "application/json",
@@ -33,7 +41,7 @@ function submitter(stack: Stack, extra: (i: number) => Record<string, unknown> =
   return async (i: number): Promise<number> => {
     const res = await fetch(`${stack.url}/jobs`, {
       method: "POST",
-      headers,
+      headers: { ...headers, ...keyHeader(idempotencyKey(i)) },
       body: JSON.stringify({ type: "bench.job", payload: { n: i, ...extra(i) } }),
     });
     await res.arrayBuffer();
@@ -348,8 +356,14 @@ export async function backlogScenario(stack: Stack) {
 
 // ============================================================================== FAILURES
 /** Kill an API instance in the middle of POST /jobs traffic. A client retries once on failure. */
-export async function instanceLossScenario(stack: Stack) {
-  say("\n[instance-loss] POST /jobs under load; api-2 is SIGKILLed at 8 s and restarted at 16 s");
+export async function instanceLossScenario(stack: Stack, keyed = false) {
+  say(
+    `\n[instance-loss${keyed ? "-keyed" : ""}] POST /jobs under load; api-2 is SIGKILLed at 8 s and restarted at 16 s`,
+  );
+  if (keyed) {
+    say("  Every submission carries an Idempotency-Key, so the client's one retry is safe.");
+    say("  EXPECTED: the same few first-try failures as without keys, but ZERO duplicate jobs.");
+  }
   say(
     "  EXPECTED: the gateway retries connection failures on api-1, so almost no client error; a request",
   );
@@ -362,7 +376,7 @@ export async function instanceLossScenario(stack: Stack) {
     number,
     { firstStatus: number | string; acked: boolean; tries: number }
   >();
-  const post = submitter(stack);
+  const post = submitter(stack, () => ({}), keyed ? (n) => `bench-${n}` : undefined);
   const t0 = performance.now();
   const timeline: Array<{ atS: number; event: string }> = [];
   const mark = (event: string): void =>
@@ -395,12 +409,12 @@ export async function instanceLossScenario(stack: Stack) {
           status = `error:${(error as Error).name}`;
         }
         if (tries === 0) intent.firstStatus = status;
-        if (status === 201) break;
+        if (status === 201 || status === 200) break;
         failuresAtS.push(Number(((performance.now() - t0) / 1000).toFixed(2)));
         await sleep(100);
       }
       intent.tries = tries + 1;
-      intent.acked = status === 201;
+      intent.acked = status === 201 || status === 200;
       return status;
     },
   });

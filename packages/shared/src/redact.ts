@@ -11,7 +11,7 @@
  * It is a safety net, not a licence to log secrets: the first rule is still never to pass them.
  */
 const SENSITIVE_NAME =
-  /^(authorization|proxy-authorization|cookie|set-cookie|password|passwd|secret|token|api[-_]?key|apikey|x-api-key|secret[-_]?hash|payload|operator_api_key|viewer_api_key|database_url)$/i;
+  /^(authorization|proxy-authorization|cookie|set-cookie|api[-_]?key|apikey|x-api-key|secret[-_]?hash|payload|operator_api_key|viewer_api_key|database_url)$|password|passwd|secret|token/i;
 
 const KEY_VALUE = /wm_[a-f0-9]{8}_[A-Za-z0-9_-]{43}/g;
 const BEARER_VALUE = /\b(Bearer)\s+[A-Za-z0-9._~+/=-]{8,}/gi;

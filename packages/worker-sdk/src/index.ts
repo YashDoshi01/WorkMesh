@@ -7,3 +7,11 @@ export {
   type LogFn,
   type WorkerOptions,
 } from "./worker.js";
+export {
+  WorkMesh,
+  validateSubmit,
+  type Job,
+  type SubmitJobInput,
+  type SubmittedJob,
+  type WorkMeshOptions,
+} from "./submit.js";

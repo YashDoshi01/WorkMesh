@@ -30,6 +30,13 @@ export const envSchema = z
     SHUTDOWN_GRACE_MS: z.coerce.number().int().min(1000).max(120_000).default(20_000),
     // Connections this instance may hold to PostgreSQL. N instances hold N times this many.
     DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+    // Customer sign-in (Phase 10). How long a login stays valid, in hours.
+    SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168),
+    // May anyone create a new organisation? "false" makes the deployment invitation-only.
+    PUBLIC_SIGNUP: z.enum(["true", "false"]).default("true"),
+    // Send the session cookie with the Secure flag. It MUST be "true" once the site is served over
+    // HTTPS; browsers do not send Secure cookies over plain http, so the default for local use is false.
+    COOKIE_SECURE: z.enum(["true", "false"]).default("false"),
     // Operator API keys for the dashboard / operator plane (/ops/*). There are deliberately NO
     // defaults: a server that silently falls back to a known key is worse than one that refuses
     // to start. `viewer` can read; `operator` can read and change things.

@@ -7,6 +7,8 @@ import { jobRoutes } from "./jobs/routes.js";
 import { OpsActions } from "./ops/actions.js";
 import { AuditRepository } from "./ops/audit.js";
 import { ApiKeyRepository } from "./keys/repository.js";
+import { portalRoutes, type PortalOptions } from "./portal/routes.js";
+import { PortalStore } from "./portal/store.js";
 import { MachineAuth } from "./keys/auth.js";
 import { Authenticator } from "./ops/auth.js";
 import { OpsQueries } from "./ops/queries.js";
@@ -28,6 +30,8 @@ export interface AppOptions {
    * test suites written before Phase 8.
    */
   machineAuth: boolean;
+  /** Customer accounts (email + password). Without it the /app/* API is not mounted. */
+  portal?: PortalOptions;
 }
 
 /** How long /readyz waits for the database before saying "not ready". */
@@ -106,14 +110,37 @@ export function createApp(
   // Operator plane: the dashboard. Every route needs an API key (see ops/routes.ts).
   if (options) {
     const audit = new AuditRepository(db);
+    const actions = new OpsActions(db, jobs, workflows, schedules, audit, keys);
+    const queries = new OpsQueries(db);
+    if (options.portal) {
+      app.use(
+        "/app",
+        portalRoutes({
+          db,
+          options: options.portal,
+          store: new PortalStore(db, {
+            sessionTtlHours: options.portal.sessionTtlHours,
+            cost: options.portal.cost,
+          }),
+          actions,
+          audit,
+          queries,
+          jobs,
+          lifecycle,
+          workflows,
+          schedules,
+          keys,
+        }),
+      );
+    }
     app.use(
       "/ops",
       opsRoutes({
         auth: new Authenticator(options),
-        actions: new OpsActions(db, jobs, workflows, schedules, audit, keys),
+        actions,
         keys,
         audit,
-        queries: new OpsQueries(db),
+        queries,
         jobs,
         lifecycle,
         workflows,

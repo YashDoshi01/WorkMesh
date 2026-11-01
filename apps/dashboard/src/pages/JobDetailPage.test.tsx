@@ -5,7 +5,7 @@ import { apiError, attempt, fakeApi, job, renderAs } from "../test-utils";
 
 const route = "/jobs/11111111-1111-4111-8111-111111111111";
 const page = <JobDetailPage />;
-const mount = (role: "operator" | "viewer", j = job(), overrides = {}) => {
+const mount = (role: "admin" | "viewer", j = job(), overrides = {}) => {
   const api = fakeApi({
     job: vi.fn(async () => j),
     attempts: vi.fn(async () => [attempt()]),
@@ -16,17 +16,17 @@ const mount = (role: "operator" | "viewer", j = job(), overrides = {}) => {
 
 describe("what the page offers (jobActions)", () => {
   it.each([
-    ["operator", { status: "queued" }, { cancel: true, retry: false }],
-    ["operator", { status: "failed" }, { cancel: false, retry: true }],
-    ["operator", { status: "running" }, { cancel: false, retry: false }],
-    ["operator", { status: "succeeded" }, { cancel: false, retry: false }],
-    ["operator", { status: "cancelled" }, { cancel: false, retry: false }],
-    ["operator", { status: "queued", workflowId: "w1" }, { cancel: false, retry: false }],
-    ["operator", { status: "failed", workflowId: "w1" }, { cancel: false, retry: false }],
+    ["admin", { status: "queued" }, { cancel: true, retry: false }],
+    ["admin", { status: "failed" }, { cancel: false, retry: true }],
+    ["admin", { status: "running" }, { cancel: false, retry: false }],
+    ["admin", { status: "succeeded" }, { cancel: false, retry: false }],
+    ["admin", { status: "cancelled" }, { cancel: false, retry: false }],
+    ["admin", { status: "queued", workflowId: "w1" }, { cancel: false, retry: false }],
+    ["admin", { status: "failed", workflowId: "w1" }, { cancel: false, retry: false }],
     ["viewer", { status: "queued" }, { cancel: false, retry: false }],
     ["viewer", { status: "failed" }, { cancel: false, retry: false }],
   ] as const)("%s, job %j -> %j", (role, overrides, expected) => {
-    const a = jobActions(job(overrides as never), role === "operator");
+    const a = jobActions(job(overrides as never), role === "admin");
     expect({ cancel: a.cancel, retry: a.retry }).toEqual(expected);
   });
 });
@@ -34,7 +34,7 @@ describe("what the page offers (jobActions)", () => {
 describe("JobDetailPage", () => {
   it("shows the job's facts, error and attempt history from the API", async () => {
     mount(
-      "operator",
+      "admin",
       job({ status: "failed", attemptCount: 1, maxAttempts: 1, lastError: "provider said no" }),
     );
     expect(await screen.findByText("provider said no")).toBeTruthy();
@@ -46,7 +46,7 @@ describe("JobDetailPage", () => {
 
   it("an operator can cancel a queued job, after confirming", async () => {
     const cancelJob = vi.fn(async () => job({ status: "cancelled" }));
-    const { api } = mount("operator", job({ status: "queued" }), { cancelJob });
+    const { api } = mount("admin", job({ status: "queued" }), { cancelJob });
     fireEvent.click(await screen.findByRole("button", { name: "Cancel job" }));
     expect(cancelJob).not.toHaveBeenCalled(); // the first click only arms it
     fireEvent.click(screen.getByRole("button", { name: "Yes, cancel it" }));
@@ -66,7 +66,7 @@ describe("JobDetailPage", () => {
     const cancelJob = vi.fn(async () => {
       throw refusal;
     });
-    mount("operator", job({ status: "queued" }), { cancelJob });
+    mount("admin", job({ status: "queued" }), { cancelJob });
     fireEvent.click(await screen.findByRole("button", { name: "Cancel job" }));
     fireEvent.click(screen.getByRole("button", { name: "Yes, cancel it" }));
     const alert = await screen.findByRole("alert");
@@ -76,7 +76,7 @@ describe("JobDetailPage", () => {
 
   it("an operator can retry a failed job with a chosen number of extra attempts", async () => {
     const retryJob = vi.fn(async () => job({ status: "queued" }));
-    mount("operator", job({ status: "failed", attemptCount: 1, maxAttempts: 1 }), { retryJob });
+    mount("admin", job({ status: "failed", attemptCount: 1, maxAttempts: 1 }), { retryJob });
     const input = await screen.findByLabelText("Extra attempts");
     fireEvent.change(input, { target: { value: "3" } });
     fireEvent.click(screen.getByRole("button", { name: "Retry job" }));
@@ -94,17 +94,14 @@ describe("JobDetailPage", () => {
   });
 
   it("explains why a running job has no cancel button", async () => {
-    mount("operator", job({ status: "running", attemptCount: 1 }));
+    mount("admin", job({ status: "running", attemptCount: 1 }));
     await screen.findByText("email.send");
     expect(screen.queryByRole("button", { name: "Cancel job" })).toBeNull();
     expect(screen.getByText(/cannot be stopped safely/)).toBeTruthy();
   });
 
   it("a workflow job points to its workflow instead of offering actions", async () => {
-    mount(
-      "operator",
-      job({ status: "queued", workflowId: "33333333-3333-4333-8333-333333333333" }),
-    );
+    mount("admin", job({ status: "queued", workflowId: "33333333-3333-4333-8333-333333333333" }));
     await screen.findByText("email.send");
     expect(screen.queryByRole("button", { name: "Cancel job" })).toBeNull();
     expect(screen.getByText(/part of a workflow/)).toBeTruthy();
@@ -114,7 +111,7 @@ describe("JobDetailPage", () => {
   });
 
   it("shows an error state, with a way to retry, when the job cannot be loaded", async () => {
-    mount("operator", job(), {
+    mount("admin", job(), {
       job: vi.fn(async () => {
         throw apiError(404, "job_not_found", "Job does not exist");
       }),
@@ -125,7 +122,7 @@ describe("JobDetailPage", () => {
   });
 
   it("says plainly when no attempt has started", async () => {
-    mount("operator", job(), { attempts: vi.fn(async () => []) });
+    mount("admin", job(), { attempts: vi.fn(async () => []) });
     expect(await screen.findByText("No attempt has started yet.")).toBeTruthy();
   });
 });

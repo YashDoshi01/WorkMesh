@@ -3,6 +3,7 @@ import { logError, logInfo, logWarn, parseEnv, parseTrustProxy } from "@workmesh
 import { createApp } from "./app.js";
 import { migrate } from "./db/migrate.js";
 import { createPool } from "./db/pool.js";
+import { DEFAULT_COST } from "./portal/passwords.js";
 import { JobLifecycle } from "./jobs/lifecycle.js";
 import { LeaseReaper } from "./jobs/reaper.js";
 import { Scheduler } from "./schedules/scheduler.js";
@@ -45,6 +46,12 @@ const server = createApp(
     viewerKey: env.VIEWER_API_KEY,
     // Workers and customer clients must present a valid API key. Never switch this off here.
     machineAuth: true,
+    portal: {
+      sessionTtlHours: env.SESSION_TTL_HOURS,
+      cookieSecure: env.COOKIE_SECURE === "true",
+      publicSignup: env.PUBLIC_SIGNUP === "true",
+      cost: DEFAULT_COST,
+    },
   },
   {
     // The header naming the instance is opt-in: an explicit INSTANCE_ID, never the hostname.

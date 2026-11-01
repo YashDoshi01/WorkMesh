@@ -35,6 +35,10 @@ x-api: &api
     DB_POOL_MAX: ${DB_POOL_MAX:-10}
     # Optional tuning (defaults match the application defaults). The benchmark harness shortens
     # these to make recovery experiments fast; normal use never needs to set them.
+    # Customer sign-in (all optional). COOKIE_SECURE must be "true" once the site is served over HTTPS.
+    SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+    PUBLIC_SIGNUP: ${PUBLIC_SIGNUP:-true}
+    COOKIE_SECURE: ${COOKIE_SECURE:-false}
     LEASE_MS: ${LEASE_MS:-30000}
     REAPER_INTERVAL_MS: ${REAPER_INTERVAL_MS:-5000}
     RETRY_BASE_MS: ${RETRY_BASE_MS:-1000}

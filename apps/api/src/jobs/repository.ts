@@ -1,5 +1,6 @@
 import type { Db } from "../db/pool.js";
 import type { Queryable } from "../db/tx.js";
+import { IdempotencyConflictError, requestHash } from "./idempotency.js";
 import type { CreateJobInput, JobStatus } from "./schema.js";
 
 export interface Job {
@@ -152,6 +153,51 @@ export class JobRepository {
       ],
     );
     return toJob(result.rows[0]!);
+  }
+
+  /**
+   * Creates the job unless this account already used `idempotencyKey`. Then it returns the job that
+   * key created (`replayed: true`), provided the request is the same one; a different request under
+   * the same key is refused. The unique index on (account, key) decides races: of two simultaneous
+   * requests exactly one inserts, and the other waits for it and then reads its row.
+   */
+  async createIdempotent(
+    input: CreateJobInput,
+    owner: JobOwner,
+    idempotencyKey: string,
+  ): Promise<{ job: Job; replayed: boolean }> {
+    const hash = requestHash(input);
+    const inserted = await this.db.query<JobRow>(
+      `INSERT INTO jobs (type, payload, priority, run_at, scheduled_for, max_attempts, account,
+                         request_id, idempotency_key, request_hash)
+       SELECT $1, $2, $3, t.at, t.at, $5, $6, $7, $8, $9
+       FROM (SELECT COALESCE($4::timestamptz, now()) AS at) AS t
+       ON CONFLICT (account, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING
+       RETURNING ${COLUMNS}`,
+      [
+        input.type,
+        JSON.stringify(input.payload),
+        input.priority,
+        input.runAt ?? null,
+        input.maxAttempts,
+        owner.account,
+        owner.requestId ?? null,
+        idempotencyKey,
+        hash,
+      ],
+    );
+    if (inserted.rows[0]) return { job: toJob(inserted.rows[0]), replayed: false };
+
+    const existing = await this.db.query<JobRow & { request_hash: Buffer }>(
+      `SELECT ${COLUMNS}, request_hash FROM jobs WHERE account = $1 AND idempotency_key = $2`,
+      [owner.account, idempotencyKey],
+    );
+    const row = existing.rows[0];
+    if (!row) throw new Error("idempotency conflict without a matching job"); // cannot happen: jobs are not deleted
+    if (!row.request_hash.equals(hash)) {
+      throw new IdempotencyConflictError("this Idempotency-Key was used for a different request");
+    }
+    return { job: toJob(row), replayed: true };
   }
 
   async findById(id: string): Promise<Job | null> {

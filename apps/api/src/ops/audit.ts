@@ -1,12 +1,19 @@
 import type { Db } from "../db/pool.js";
 import type { Queryable } from "../db/tx.js";
-import type { Principal, Role } from "./auth.js";
+import type { Role } from "./auth.js";
+
+/** Who did it. Operators are viewer/operator; customer users are admin/viewer. */
+export type AuditRole = Role | "admin";
+export interface AuditActor {
+  role: AuditRole;
+  actor: string;
+}
 
 export interface AuditEntry {
   id: string;
   at: string;
   actor: string;
-  role: Role;
+  role: AuditRole;
   action: string;
   targetType: string;
   targetId: string;
@@ -26,7 +33,7 @@ interface Row {
   id: string; // bigserial arrives as a string
   at: Date;
   actor: string;
-  role: Role;
+  role: AuditRole;
   action: string;
   target_type: string;
   target_id: string;
@@ -44,7 +51,7 @@ export class AuditRepository {
    */
   async record(
     q: Queryable,
-    principal: Principal,
+    principal: AuditActor,
     entry: {
       action: string;
       targetType: string;
@@ -52,11 +59,13 @@ export class AuditRepository {
       details?: Record<string, unknown>;
       requestId?: string | undefined;
       clientIp?: string | undefined;
+      /** The customer organisation this belongs to (null for operator-plane actions on no account). */
+      account?: string | undefined;
     },
   ): Promise<void> {
     await q.query(
-      `INSERT INTO audit_log (actor, role, action, target_type, target_id, details, request_id, client_ip)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO audit_log (actor, role, action, target_type, target_id, details, request_id, client_ip, account)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         principal.actor,
         principal.role,
@@ -66,19 +75,20 @@ export class AuditRepository {
         JSON.stringify(entry.details ?? {}),
         entry.requestId ?? null,
         entry.clientIp ?? null,
+        entry.account ?? null,
       ],
     );
   }
 
   /** Newest first. `before` is the id of the oldest entry already seen. */
-  async list(limit: number, before?: string): Promise<AuditPage> {
+  async list(limit: number, before?: string, account?: string): Promise<AuditPage> {
     const result = await this.db.query<Row>(
       `SELECT id, at, actor, role, action, target_type, target_id, details, request_id, client_ip
        FROM audit_log
-       WHERE ($2::bigint IS NULL OR id < $2::bigint)
+       WHERE ($2::bigint IS NULL OR id < $2::bigint) AND ($3::text IS NULL OR account = $3)
        ORDER BY id DESC
        LIMIT $1`,
-      [limit + 1, before ?? null],
+      [limit + 1, before ?? null, account ?? null],
     );
     const hasMore = result.rows.length > limit;
     const rows = hasMore ? result.rows.slice(0, limit) : result.rows;

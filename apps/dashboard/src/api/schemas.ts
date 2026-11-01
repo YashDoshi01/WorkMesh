@@ -170,7 +170,7 @@ export const auditEntrySchema = z.object({
   id: z.string(),
   at: iso,
   actor: z.string(),
-  role: z.enum(["viewer", "operator"]),
+  role: z.enum(["viewer", "operator", "admin"]),
   action: z.string(),
   targetType: z.string(),
   targetId: z.string(),
@@ -185,6 +185,68 @@ export const auditPageSchema = z.object({
 });
 export type AuditPage = z.infer<typeof auditPageSchema>;
 
-export const meSchema = z.object({ role: z.enum(["viewer", "operator"]), actor: z.string() });
+export const roleSchema = z.enum(["admin", "viewer"]);
+export type Role = z.infer<typeof roleSchema>;
+
+export const memberSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string(),
+  role: roleSchema,
+  createdAt: iso,
+  lastLoginAt: nullableIso,
+});
+export type Member = z.infer<typeof memberSchema>;
+export const memberListSchema = z.object({ items: z.array(memberSchema) });
+
+/** Who is signed in, and which organisation they belong to. */
+export const meSchema = z.object({
+  user: memberSchema,
+  account: z.object({ slug: z.string(), name: z.string() }),
+});
 export type Me = z.infer<typeof meSchema>;
-export type Role = Me["role"];
+
+export const keySchema = z.object({
+  id: z.string(),
+  prefix: z.string(),
+  kind: z.enum(["client", "worker"]),
+  account: z.string(),
+  name: z.string(),
+  jobTypes: z.array(z.string()).nullable(),
+  createdAt: iso,
+  createdBy: z.string(),
+  expiresAt: nullableIso,
+  revokedAt: nullableIso,
+  revokedBy: z.string().nullable(),
+  lastUsedAt: nullableIso,
+  status: z.enum(["active", "revoked", "expired"]),
+});
+export type ApiKey = z.infer<typeof keySchema>;
+export const keyListSchema = z.object({ items: z.array(keySchema) });
+/** Returned once, when a key is created: the only time its secret is ever shown. */
+export const createdKeySchema = keySchema.extend({ secret: z.string() });
+export type CreatedKey = z.infer<typeof createdKeySchema>;
+
+export const inviteSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: roleSchema,
+  invitedBy: z.string().nullable(),
+  createdAt: iso,
+  expiresAt: iso,
+  status: z.enum(["open", "accepted", "revoked", "expired"]),
+});
+export type Invite = z.infer<typeof inviteSchema>;
+export const inviteListSchema = z.object({ items: z.array(inviteSchema) });
+export const createdInviteSchema = inviteSchema.extend({ token: z.string() });
+export type CreatedInvite = z.infer<typeof createdInviteSchema>;
+export const inviteInfoSchema = z.object({
+  email: z.string(),
+  role: roleSchema,
+  accountName: z.string(),
+});
+export type InviteInfo = z.infer<typeof inviteInfoSchema>;
+
+export const okSchema = z.object({ ok: z.boolean() });
+/** The answer to "who am I?": the identity, or null for a visitor. */
+export const sessionSchema = z.object({ me: meSchema.nullable() });

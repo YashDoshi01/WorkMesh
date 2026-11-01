@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 9 (complete)** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
+**Current milestone: Phase 10 (product redesign) on top of the complete Phase 0-9 plan** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
 
 ## Architecture (target)
 
@@ -97,7 +97,7 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Gateway and scaling](docs/GATEWAY.md)
-- [Security](docs/SECURITY.md), [threat model](docs/THREAT_MODEL.md), [observability](docs/OBSERVABILITY.md)
+- [The app (customer dashboard)](docs/DASHBOARD.md), [security](docs/SECURITY.md), [threat model](docs/THREAT_MODEL.md), [observability](docs/OBSERVABILITY.md)
 - [Performance and failure tests](docs/PERFORMANCE.md), [recovery](docs/RECOVERY.md), [diagrams](docs/DIAGRAMS.md), [demo script](docs/DEMO.md), [interview notes](docs/INTERVIEW_NOTES.md)
 - [Decisions](docs/DECISIONS.md)
 - [Learning log](docs/LEARNING_LOG.md)
@@ -250,4 +250,33 @@ npm run bench -- perf        # about 7 minutes
 npm run bench -- failure     # about 4 minutes
 ```
 
-Known limits stated plainly: at-least-once delivery (not exactly-once), no idempotency key on `POST /jobs`, NGINX and PostgreSQL are single points of failure, no TLS. See [`docs/RECOVERY.md`](docs/RECOVERY.md) and [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+Known limits stated plainly: at-least-once delivery (not exactly-once), duplicate protection on `POST /jobs` is opt-in via an `Idempotency-Key` (see [`docs/SDK.md`](docs/SDK.md)), NGINX and PostgreSQL are single points of failure, no TLS. See [`docs/RECOVERY.md`](docs/RECOVERY.md) and [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+
+## The app: sign up and use it (Phase 10)
+
+```bash
+npm run gateway:up           # rebuilds everything, including the dashboard
+# open http://localhost:8080/dashboard/ and choose "Create account"
+```
+
+You become the admin of a new organisation. From the app you can create API keys, invite teammates (as **admins**, who can change things, or **viewers**, who are read-only), submit jobs, manage schedules and see the audit log. Each organisation sees only its own data. Details, screens and security notes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md); the reasoning: ADR-0031 in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+New optional settings (see `.env.example`): `SESSION_TTL_HOURS`, `PUBLIC_SIGNUP`, `COOKIE_SECURE` (set it to `true` once the site is behind HTTPS). Passwords cannot be reset by email (there is no email service): an admin removes and re-invites someone who forgot theirs.
+
+## Queue jobs from your code (Phase 11)
+
+```ts
+import { WorkMesh } from "@workmesh/worker-sdk";
+
+const workmesh = new WorkMesh({
+  apiUrl: "http://localhost:8080",
+  apiKey: process.env.WORKMESH_CLIENT_KEY!,
+});
+await workmesh.jobs.submit({
+  type: "generate-invoice",
+  payload: { orderId: "ORD-1024" },
+  idempotencyKey: "invoice-ORD-1024", // a retry returns the same job instead of creating a second
+});
+```
+
+A worker registers a handler with the same name (`worker.register("generate-invoice", ...)`); how the job is done lives only there. Full guide, options, errors and the exact retry rules: [`docs/SDK.md`](docs/SDK.md).

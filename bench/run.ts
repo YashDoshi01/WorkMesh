@@ -34,7 +34,13 @@ if (names.length === 0) {
 const FAST = { LEASE_MS: "6000", REAPER_INTERVAL_MS: "1000", RETRY_BASE_MS: "2000" };
 const PERF = new Set(["submit", "drain", "backlog"]);
 const TUNING = new Set(["noise", "pool", "ab"]);
-const FAILURE = new Set(["instance-loss", "worker-crash", "db-down", "retry-storm"]);
+const FAILURE = new Set([
+  "instance-loss",
+  "instance-loss-keyed",
+  "worker-crash",
+  "db-down",
+  "retry-storm",
+]);
 
 const expanded = names.flatMap((n) =>
   n === "perf" ? [...PERF] : n === "failure" ? [...FAILURE] : [n],
@@ -73,9 +79,9 @@ async function group(scenarioNames: string[], fast: boolean): Promise<void> {
       } else if (name === "backlog") {
         await stack.setLimits("lifted");
         data = await backlogScenario(stack);
-      } else if (name === "instance-loss") {
+      } else if (name === "instance-loss" || name === "instance-loss-keyed") {
         await stack.setLimits("lifted");
-        data = await instanceLossScenario(stack);
+        data = await instanceLossScenario(stack, name === "instance-loss-keyed");
       } else if (name === "worker-crash") data = await workerCrashScenario(stack, 6000, 1000);
       else if (name === "db-down") {
         await stack.setLimits("lifted");

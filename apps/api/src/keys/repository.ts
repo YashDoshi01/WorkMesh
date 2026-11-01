@@ -118,9 +118,11 @@ export class ApiKeyRepository {
     throw new Error("could not generate a unique key prefix");
   }
 
-  async list(): Promise<ApiKey[]> {
+  async list(account?: string): Promise<ApiKey[]> {
     const r = await this.db.query<Row>(
-      `SELECT ${COLUMNS} FROM api_keys ORDER BY created_at DESC, id DESC LIMIT 500`,
+      `SELECT ${COLUMNS} FROM api_keys WHERE ($1::text IS NULL OR account = $1)
+       ORDER BY created_at DESC, id DESC LIMIT 500`,
+      [account ?? null],
     );
     return r.rows.map(toKey);
   }

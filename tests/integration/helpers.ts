@@ -38,7 +38,9 @@ export async function setupTestDb(): Promise<Db> {
 }
 
 export async function resetTables(db: Db): Promise<void> {
-  await db.query("TRUNCATE jobs, workers, schedules, workflows, audit_log, api_keys CASCADE");
+  await db.query(
+    "TRUNCATE jobs, workers, schedules, workflows, audit_log, api_keys, accounts CASCADE",
+  );
 }
 
 /** Operator-plane keys used by the tests. */
@@ -53,6 +55,17 @@ export const TEST_AUTH: AppOptions = {
 
 /** Everything on, as in production: the machine plane needs API keys. */
 export const SECURE_AUTH: AppOptions = { ...TEST_AUTH, machineAuth: true };
+
+/** Everything on, plus customer sign-in. A very cheap password hash keeps the tests fast. */
+export const PORTAL_AUTH: AppOptions = {
+  ...SECURE_AUTH,
+  portal: {
+    sessionTtlHours: 24,
+    cookieSecure: false,
+    publicSignup: true,
+    cost: { N: 1024, r: 8, p: 1 },
+  },
+};
 
 export interface Started {
   server: Server;

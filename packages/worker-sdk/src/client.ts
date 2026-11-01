@@ -32,6 +32,11 @@ export interface ClaimResult {
 }
 
 export class ApiError extends Error {
+  /** Per-field problems the server reported (for a 400). */
+  details: Array<{ path: string; message: string }> = [];
+  /** From a Retry-After header, in seconds. */
+  retryAfterSeconds?: number;
+
   constructor(
     readonly status: number,
     readonly code: string,

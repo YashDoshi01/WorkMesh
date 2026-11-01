@@ -13,7 +13,23 @@ export type FakeApi = { [K in keyof ApiClient]: ReturnType<typeof vi.fn> };
 export function fakeApi(overrides: Partial<FakeApi> = {}): FakeApi {
   const never = () => new Promise(() => undefined);
   return {
-    me: vi.fn(never),
+    session: vi.fn(never),
+    signup: vi.fn(never),
+    login: vi.fn(never),
+    logout: vi.fn(never),
+    inviteInfo: vi.fn(never),
+    acceptInvite: vi.fn(never),
+    changePassword: vi.fn(never),
+    keys: vi.fn(never),
+    createKey: vi.fn(never),
+    revokeKey: vi.fn(never),
+    members: vi.fn(never),
+    invites: vi.fn(never),
+    createInvite: vi.fn(never),
+    revokeInvite: vi.fn(never),
+    changeRole: vi.fn(never),
+    removeMember: vi.fn(never),
+    createSchedule: vi.fn(never),
     stats: vi.fn(never),
     workers: vi.fn(never),
     audit: vi.fn(never),
@@ -41,11 +57,23 @@ export function renderAs(
   options: { path?: string; route?: string } = {},
 ) {
   const session: Session = {
-    me: { role, actor: `${role}:abcd1234` },
+    me: {
+      user: {
+        id: "99999999-9999-4999-8999-999999999999",
+        email: `${role}@example.com`,
+        name: "Test User",
+        role,
+        createdAt: "2026-01-01T10:00:00.000Z",
+        lastLoginAt: null,
+      },
+      account: { slug: "acme", name: "Acme" },
+    },
     api: api as unknown as ApiClient,
     signIn: vi.fn(),
+    signUp: vi.fn(),
+    acceptInvite: vi.fn(),
     signOut: vi.fn(),
-    canOperate: role === "operator",
+    canOperate: role === "admin",
   };
   return {
     session,

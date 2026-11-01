@@ -1,68 +1,71 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useSession } from "./auth/auth";
-import { StatusBadge } from "./components/bits";
+import { AppShell } from "./components/AppShell";
+import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { AuditPage } from "./pages/AuditPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
 import { JobsPage } from "./pages/JobsPage";
+import { KeysPage } from "./pages/KeysPage";
+import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { SignupPage } from "./pages/SignupPage";
 import { SubmitJobPage } from "./pages/SubmitJobPage";
+import { TeamPage } from "./pages/TeamPage";
 import { WorkersPage } from "./pages/WorkersPage";
 import { WorkflowDetailPage } from "./pages/WorkflowDetailPage";
 import { WorkflowsPage } from "./pages/WorkflowsPage";
 
-const NAV = [
-  { to: "/", label: "Overview", end: true },
-  { to: "/jobs", label: "Jobs" },
-  { to: "/workflows", label: "Workflows" },
-  { to: "/schedules", label: "Schedules" },
-  { to: "/workers", label: "Workers" },
-  { to: "/audit", label: "Audit log" },
-  { to: "/submit", label: "Submit job" },
-];
+/**
+ * Once signed in, the sign-in and sign-up pages are pointless. Send the person where they were
+ * heading before they were asked to sign in (a deep link), or home. Doing it HERE, in the router,
+ * means it happens the moment the session exists, whichever page created it.
+ */
+function AfterSignIn() {
+  const from = (useLocation().state as { from?: { pathname: string; search?: string } } | null)
+    ?.from;
+  return <Navigate to={from ? `${from.pathname}${from.search ?? ""}` : "/"} replace />;
+}
 
 export function App() {
-  const { me, signOut, canOperate } = useSession();
-  if (!me) return <LoginPage />;
+  const { me } = useSession();
+  const location = useLocation();
+
+  if (!me) {
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/invite" element={<AcceptInvitePage />} />
+        {/* A deep link opened while signed out: sign in, then come back to it. */}
+        <Route path="*" element={<Navigate to="/login" replace state={{ from: location }} />} />
+      </Routes>
+    );
+  }
 
   return (
-    <>
-      <header className="app-header">
-        <span className="brand">WorkMesh</span>
-        <nav aria-label="Main">
-          {NAV.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end ?? false}>
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-        <span className="who">
-          <StatusBadge status={me.role} />
-          <button type="button" className="link-button" onClick={signOut}>
-            Sign out
-          </button>
-        </span>
-      </header>
-      <main className="app-main">
-        {canOperate ? null : (
-          <p className="banner banner-info" role="note">
-            You are signed in as a viewer: everything is read-only.
-          </p>
-        )}
-        <Routes>
-          <Route path="/" element={<OverviewPage />} />
-          <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/jobs/:id" element={<JobDetailPage />} />
-          <Route path="/workflows" element={<WorkflowsPage />} />
-          <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
-          <Route path="/schedules" element={<SchedulesPage />} />
-          <Route path="/workers" element={<WorkersPage />} />
-          <Route path="/audit" element={<AuditPage />} />
-          <Route path="/submit" element={<SubmitJobPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </>
+    <AppShell>
+      <Routes>
+        <Route path="/" element={<OverviewPage />} />
+        <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/jobs/:id" element={<JobDetailPage />} />
+        <Route path="/workflows" element={<WorkflowsPage />} />
+        <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+        <Route path="/schedules" element={<SchedulesPage />} />
+        <Route path="/workers" element={<WorkersPage />} />
+        <Route path="/keys" element={<KeysPage />} />
+        <Route path="/team" element={<TeamPage />} />
+        <Route path="/audit" element={<AuditPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/submit" element={<SubmitJobPage />} />
+        <Route path="/invite" element={<AcceptInvitePage />} />
+        <Route path="/login" element={<AfterSignIn />} />
+        <Route path="/signup" element={<AfterSignIn />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AppShell>
   );
 }

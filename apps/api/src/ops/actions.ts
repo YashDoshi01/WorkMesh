@@ -5,9 +5,9 @@ import type { CreateJobInput } from "../jobs/schema.js";
 import type { ApiKey, ApiKeyRepository } from "../keys/repository.js";
 import type { CreateKeyInput } from "../keys/schema.js";
 import type { Schedule, ScheduleRepository } from "../schedules/repository.js";
+import type { CreateScheduleInput } from "../schedules/schema.js";
 import type { WorkflowDetail, WorkflowRepository } from "../workflows/repository.js";
-import type { Principal } from "./auth.js";
-import type { AuditRepository } from "./audit.js";
+import type { AuditActor, AuditRepository } from "./audit.js";
 
 export type ActionResult<T> =
   | { outcome: "ok"; value: T }
@@ -17,8 +17,10 @@ export type ActionResult<T> =
 /** The most attempts a job can ever be allowed (mirrors the CHECK constraint). */
 export const MAX_ATTEMPT_BUDGET = 1000;
 
-interface Context {
-  principal: Principal;
+export interface Context {
+  principal: AuditActor;
+  /** Set for customer users: the audit record then belongs to that organisation. */
+  account?: string | undefined;
   requestId: string | undefined;
   clientIp: string | undefined;
 }
@@ -68,6 +70,7 @@ export class OpsActions {
         },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return created;
     });
@@ -87,6 +90,7 @@ export class OpsActions {
         details: { prefix: key.prefix, kind: key.kind, account: key.account, name: key.name },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return { outcome: "ok", value: key };
     });
@@ -109,6 +113,7 @@ export class OpsActions {
         },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return job;
     });
@@ -132,6 +137,7 @@ export class OpsActions {
         details: { type: row.type },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return { outcome: "ok", value: toJob(row) };
     });
@@ -162,6 +168,7 @@ export class OpsActions {
         details: { type: row.type, attemptsGranted: attempts, attemptsSoFar: row.attempt_count },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return { outcome: "ok", value: toJob(row) };
     });
@@ -176,6 +183,7 @@ export class OpsActions {
         details: { name: workflow.name, statusAfter: workflow.status },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       }),
     );
     if (result.outcome === "not_found") return { outcome: "not_found" };
@@ -204,8 +212,35 @@ export class OpsActions {
         details: { name: schedule.name },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return { outcome: "ok", value: schedule };
+    });
+  }
+
+  /** Creates a recurring schedule in an account, with its audit record in the same transaction. */
+  async createSchedule(
+    ctx: Context,
+    input: CreateScheduleInput,
+    account: string,
+  ): Promise<Schedule> {
+    return withTransaction(this.db, async (tx) => {
+      const schedule = await this.schedules.create(input, account, tx);
+      await this.audit.record(tx, ctx.principal, {
+        action: "schedule.create",
+        targetType: "schedule",
+        targetId: schedule.id,
+        details: {
+          name: schedule.name,
+          cron: schedule.cron,
+          timezone: schedule.timezone,
+          jobType: schedule.jobType,
+        },
+        requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
+        account: ctx.account,
+      });
+      return schedule;
     });
   }
 
@@ -220,6 +255,7 @@ export class OpsActions {
         details: { name: existing.name },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,
+        account: ctx.account,
       });
       return { outcome: "ok", value: { name: existing.name } };
     });

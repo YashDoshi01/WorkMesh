@@ -17,6 +17,19 @@ function target(type: string, id: string) {
 }
 
 export function AuditPage() {
+  const { canOperate } = useSession();
+  if (!canOperate) {
+    return (
+      <>
+        <PageHeader title="Audit log" />
+        <p className="state state-empty">Only admins can see the audit log.</p>
+      </>
+    );
+  }
+  return <AuditLog />;
+}
+
+function AuditLog() {
   const { api } = useSession();
   const [trail, setTrail] = useState<string[]>([]);
   const [before, setBefore] = useState<string | undefined>(undefined);
@@ -28,8 +41,8 @@ export function AuditPage() {
     <>
       <PageHeader title="Audit log" />
       <p className="muted small">
-        Every change made from the dashboard, newest first. Job payloads and API keys are never
-        recorded.
+        Every change made in your organisation, newest first. Job payloads, passwords and API keys
+        are never recorded.
       </p>
       <DataView
         resource={audit}

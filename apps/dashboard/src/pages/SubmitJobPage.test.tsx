@@ -73,7 +73,7 @@ describe("SubmitJobPage", () => {
 
   it("submits the request and links to the new job", async () => {
     const submitJob = vi.fn(async () => job({ id: "99999999-9999-4999-8999-999999999999" }));
-    renderAs("operator", fakeApi({ submitJob }), <SubmitJobPage />);
+    renderAs("admin", fakeApi({ submitJob }), <SubmitJobPage />);
     type("email.send");
     payload('{"to":"a@b.c"}');
     submit();
@@ -90,7 +90,7 @@ describe("SubmitJobPage", () => {
 
   it("does not call the API at all when the input is obviously wrong", () => {
     const submitJob = vi.fn();
-    renderAs("operator", fakeApi({ submitJob }), <SubmitJobPage />);
+    renderAs("admin", fakeApi({ submitJob }), <SubmitJobPage />);
     type("email.send");
     payload("{broken");
     submit();
@@ -104,7 +104,7 @@ describe("SubmitJobPage", () => {
         { path: "payload", message: "must serialize to at most 65536 bytes" },
       ] as never);
     });
-    renderAs("operator", fakeApi({ submitJob }), <SubmitJobPage />);
+    renderAs("admin", fakeApi({ submitJob }), <SubmitJobPage />);
     type("email.send");
     submit();
     const alert = await screen.findByRole("alert");
@@ -125,7 +125,7 @@ describe("SubmitJobPage", () => {
     const submitJob = vi.fn(async () => {
       throw apiError(403, "forbidden", "This action needs the 'operator' role (you have 'viewer')");
     });
-    renderAs("operator", fakeApi({ submitJob }), <SubmitJobPage />);
+    renderAs("admin", fakeApi({ submitJob }), <SubmitJobPage />);
     type("email.send");
     submit();
     expect((await screen.findByRole("alert")).textContent).toMatch(/needs the 'operator' role/);

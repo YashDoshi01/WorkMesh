@@ -528,6 +528,73 @@ describe("gateway: NGINX in front of two API instances and one PostgreSQL", () =
     );
   });
 
+  test("customer sign-up and sign-in work through the gateway, across both instances", async () => {
+    // A browser sends Origin (scheme + host + PORT). The gateway must pass the Host header with the
+    // port too, or the API's origin check would refuse every real sign-in.
+    const headers = { "x-workmesh-csrf": "1", origin: BASE };
+    const signup = await fetch(`${BASE}/app/auth/signup`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        orgName: "Gateway Test Co",
+        name: "Gwen",
+        email: `gwen${Date.now()}@example.com`,
+        password: "a long enough passphrase",
+      }),
+    });
+    assert.equal(signup.status, 201, await signup.clone().text());
+    const cookie = (signup.headers.get("set-cookie") ?? "").split(";")[0]!;
+    assert.match(cookie, /^wm_session=/);
+    assert.match(signup.headers.get("set-cookie") ?? "", /HttpOnly/i);
+
+    const served = new Set<string | null>();
+    for (let i = 0; i < 12; i++) {
+      const me = await fetch(`${BASE}/app/auth/me`, { headers: { cookie } });
+      assert.equal(
+        me.status,
+        200,
+        `the session works whichever instance answers: ${me.status} ${await me.text()}`,
+      );
+      served.add(me.headers.get("x-served-by"));
+    }
+    assert.equal(served.size, 2, "both instances accepted the same session cookie");
+  });
+
+  test("a cross-site form post cannot act as a signed-in user, even with the cookie", async () => {
+    const created = await fetch(`${BASE}/app/auth/signup`, {
+      method: "POST",
+      headers: { "x-workmesh-csrf": "1", origin: BASE, "content-type": "application/json" },
+      body: JSON.stringify({
+        orgName: "Csrf Co",
+        name: "Cy",
+        email: `cy${Date.now()}@example.com`,
+        password: "another long passphrase",
+      }),
+    });
+    const cookie = (created.headers.get("set-cookie") ?? "").split(";")[0]!;
+    const body = JSON.stringify({ type: "x.y", payload: {} });
+    const send = (extra: Record<string, string>) =>
+      fetch(`${BASE}/app/jobs`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json", ...extra },
+        body,
+      });
+    assert.equal(
+      (await send({ origin: "https://evil.example", "x-workmesh-csrf": "1" })).status,
+      403,
+    );
+    assert.equal((await send({ origin: BASE })).status, 403, "missing the app's header");
+    assert.equal((await send({ origin: BASE, "x-workmesh-csrf": "1" })).status, 201);
+  });
+
+  test("the app's page-load check is not throttled like sign-in is", async () => {
+    // 25 checks in a row is more than sign-in's burst of 10 and its 30-per-minute rate would allow,
+    // but well inside the general app limit.
+    const statuses: number[] = [];
+    for (let i = 0; i < 25; i++) statuses.push((await fetch(`${BASE}/app/auth/session`)).status);
+    assert.deepEqual([...new Set(statuses)], [200]);
+  });
+
   // Last on purpose: it exhausts the sign-in probe budget for this client address.
   test("hammering the sign-in probe is rate limited with a 429 and a JSON body", async () => {
     const replies: Reply[] = [];
@@ -541,6 +608,27 @@ describe("gateway: NGINX in front of two API instances and one PostgreSQL", () =
     assert.ok(
       replies.slice(0, 5).every((r) => r.status === 401),
       "the first attempts reached the API (and failed auth)",
+    );
+  });
+
+  test("hammering sign-in is rate limited (429), unlike ordinary calls", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 40; i++) {
+      const r = await fetch(`${BASE}/app/auth/login`, {
+        method: "POST",
+        headers: { "x-workmesh-csrf": "1", origin: BASE, "content-type": "application/json" },
+        body: JSON.stringify({ email: "nobody@example.com", password: "wrong password here" }),
+      });
+      statuses.push(r.status);
+    }
+    const limited = statuses.filter((s) => s === 429).length;
+    console.log(
+      `  40 rapid sign-in attempts: ${statuses.filter((s) => s === 401).length} reached the API, ${limited} were 429`,
+    );
+    assert.ok(limited >= 15, "most of the flood was refused at the gateway");
+    assert.ok(
+      statuses.slice(0, 5).every((s) => s === 401),
+      "the first attempts were judged by the API",
     );
   });
 });

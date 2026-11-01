@@ -17,8 +17,11 @@ const BADGES: Record<string, { icon: string; className: string }> = {
   lease_expired: { icon: "⏱", className: "warning" },
   enabled: { icon: "✓", className: "good" },
   disabled: { icon: "⏸", className: "muted" },
+  admin: { icon: "★", className: "info" },
   operator: { icon: "★", className: "info" },
   viewer: { icon: "◉", className: "neutral" },
+  client: { icon: "↗", className: "info" },
+  worker: { icon: "⚙", className: "neutral" },
 };
 
 export function StatusBadge({ status, label }: { status: string; label?: string }) {

@@ -20,6 +20,27 @@ describe("log redaction", () => {
     assert.equal(out.list[0].token, REDACTED);
   });
 
+  it("blanks any field whose NAME contains password, secret or token", () => {
+    const out = redact({
+      currentPassword: "a",
+      newPassword: "b",
+      sessionToken: "c",
+      inviteToken: "d",
+      clientSecret: "e",
+      keyPrefix: "ok",
+    }) as Record<string, unknown>;
+    for (const name of [
+      "currentPassword",
+      "newPassword",
+      "sessionToken",
+      "inviteToken",
+      "clientSecret",
+    ]) {
+      assert.equal(out[name], REDACTED, name);
+    }
+    assert.equal(out.keyPrefix, "ok");
+  });
+
   it("never logs a job payload, whatever it contains", () => {
     const out = redact({ jobId: "j", payload: { ssn: "123-45-6789", to: "a@b.c" } }) as any;
     assert.equal(out.payload, REDACTED);

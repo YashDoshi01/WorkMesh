@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from "react";
-import { ApiError, useSession } from "../auth/auth";
+import { Link } from "react-router-dom";
+import { useSession } from "../auth/auth";
+import { Field, problems } from "../components/Field";
+import { AuthLayout } from "./AuthLayout";
 
 export function LoginPage() {
   const { signIn } = useSession();
-  const [key, setKey] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -12,47 +16,54 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(key.trim());
+      await signIn(email.trim(), password);
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 401
-          ? "That API key was not accepted."
-          : err instanceof ApiError
-            ? err.message
-            : "Could not sign in.",
-      );
+      setError(problems(err).general ?? "Could not sign in.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="login">
-      <h1>WorkMesh</h1>
-      <p>Sign in with an API key from your server configuration.</p>
-      <form onSubmit={(e) => void submit(e)}>
-        <label htmlFor="api-key">API key</label>
-        <input
-          id="api-key"
-          type="password"
-          autoComplete="off"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          required
-          aria-describedby={error ? "login-error" : undefined}
-        />
+    <AuthLayout
+      title="Sign in"
+      subtitle="Welcome back. Sign in to your organisation."
+      footer={
+        <>
+          New to WorkMesh? <Link to="/signup">Create an account</Link>
+        </>
+      }
+    >
+      <form className="form" onSubmit={(e) => void submit(e)}>
         {error ? (
-          <p id="login-error" role="alert" className="field-error">
+          <p role="alert" className="banner banner-error">
             {error}
           </p>
         ) : null}
-        <button type="submit" className="primary" disabled={busy || key.trim() === ""}>
-          {busy ? "Checking…" : "Sign in"}
+        <Field
+          label="Email"
+          type="email"
+          autoComplete="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <Field
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button type="submit" className="primary lg" disabled={busy || !email || !password}>
+          {busy ? "Signing in…" : "Sign in"}
         </button>
+        <p className="muted small">
+          Forgot your password? Ask an admin of your organisation to remove your account and invite
+          you again.
+        </p>
       </form>
-      <p className="muted small">
-        The key is kept only in this browser tab and is cleared when you sign out or close the tab.
-      </p>
-    </main>
+    </AuthLayout>
   );
 }

@@ -76,10 +76,14 @@ export class ScheduleRepository {
     return r.rows[0]!.t;
   }
 
-  async create(input: CreateScheduleInput, account = "default"): Promise<Schedule> {
-    const next = nextOccurrenceAfter(input.cron, input.timezone, await this.dbNow());
+  async create(
+    input: CreateScheduleInput,
+    account = "default",
+    q: Queryable = this.db,
+  ): Promise<Schedule> {
+    const next = nextOccurrenceAfter(input.cron, input.timezone, await this.dbNow(q));
     try {
-      const r = await this.db.query<ScheduleRow>(
+      const r = await q.query<ScheduleRow>(
         `INSERT INTO schedules
            (name, cron, timezone, job_type, payload, priority, max_attempts, enabled, next_run_at, account)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
