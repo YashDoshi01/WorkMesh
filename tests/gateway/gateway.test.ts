@@ -55,13 +55,29 @@ async function waitUntil(what: string, timeoutMs: number, check: () => Promise<b
 
 type Reply = { status: number; servedBy: string | null; requestId: string | null; body: any };
 
+// Issued in before() through the operator plane, exactly as a real deployment would.
+let clientKey = "";
+let workerKey = "";
+let sendNoKey = false;
+
+function machineKeyFor(method: string, path: string): string | undefined {
+  if (sendNoKey) return undefined;
+  if (/^\/(workers)(\/|$)/.test(path)) return workerKey;
+  if (method === "POST" && /^\/jobs\/[^/]+\/(heartbeat|complete|fail)$/.test(path))
+    return workerKey;
+  if (/^\/(jobs|workflows|schedules)(\/|$|\?)/.test(path)) return clientKey;
+  return undefined;
+}
+
 async function call(
   method: string,
   path: string,
   options: { body?: unknown; headers?: Record<string, string>; key?: string } = {},
 ): Promise<Reply> {
   const headers: Record<string, string> = { ...options.headers };
-  if (options.key) headers.authorization = `Bearer ${options.key}`;
+  // The machine plane needs API keys: pick the right kind for the route unless told otherwise.
+  const key = options.key ?? machineKeyFor(method, path);
+  if (key) headers.authorization = `Bearer ${key}`;
   let body: string | undefined;
   if (options.body !== undefined) {
     body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
@@ -139,6 +155,15 @@ describe("gateway: NGINX in front of two API instances and one PostgreSQL", () =
       120_000,
       async () => (await call("GET", "/readyz")).status === 200,
     );
+    for (const kind of ["client", "worker"] as const) {
+      const created = await call("POST", "/ops/keys", {
+        key: OPERATOR_KEY,
+        body: { kind, account: "gwtest", name: `gateway-test-${kind}` },
+      });
+      assert.equal(created.status, 201, JSON.stringify(created.body));
+      if (kind === "client") clientKey = created.body.secret;
+      else workerKey = created.body.secret;
+    }
   });
 
   after(() => {
@@ -434,6 +459,62 @@ describe("gateway: NGINX in front of two API instances and one PostgreSQL", () =
       for (let i = 0; i < 8; i++) seen.add((await call("GET", "/readyz")).servedBy);
       return seen.has("api-1") && seen.has("api-2");
     });
+  });
+
+  test("the machine plane is closed to anyone without an API key, through the gateway", async () => {
+    sendNoKey = true;
+    try {
+      for (const [method, path, body] of [
+        ["POST", "/jobs", { type: "gw.nokey", payload: {} }],
+        ["GET", "/jobs", undefined],
+        ["POST", "/workers", { name: "w", jobTypes: ["x"], concurrency: 1 }],
+        ["GET", "/workflows", undefined],
+      ] as const) {
+        const r = await call(method, path, body === undefined ? {} : { body });
+        assert.equal(r.status, 401, `${method} ${path}`);
+        assert.equal(r.body.error.code, "unauthenticated");
+      }
+    } finally {
+      sendNoKey = false;
+    }
+  });
+
+  test("revoking a key takes effect on BOTH instances at once", async () => {
+    const created = await call("POST", "/ops/keys", {
+      key: OPERATOR_KEY,
+      body: { kind: "client", account: "gwtest", name: "to-revoke" },
+    });
+    const secret = created.body.secret as string;
+    const before = await Promise.all(
+      Array.from({ length: 12 }, () => call("GET", "/jobs?limit=1", { key: secret })),
+    );
+    assert.ok(before.every((r) => r.status === 200));
+    assert.equal(new Set(before.map((r) => r.servedBy)).size, 2, "both instances accepted it");
+    const revoked = await call("POST", `/ops/keys/${created.body.id}/revoke`, {
+      key: OPERATOR_KEY,
+      body: {},
+    });
+    assert.equal(revoked.status, 200);
+    const after = await Promise.all(
+      Array.from({ length: 12 }, () => call("GET", "/jobs?limit=1", { key: secret })),
+    );
+    assert.ok(
+      after.every((r) => r.status === 401),
+      "every request, whichever instance, is refused",
+    );
+    assert.equal(new Set(after.map((r) => r.servedBy)).size, 2, "and both instances refused it");
+  });
+
+  test("metrics can be scraped through the gateway with a viewer key, and not without one", async () => {
+    const ok = await call("GET", "/ops/metrics", { key: VIEWER_KEY });
+    assert.equal(ok.status, 200);
+    assert.match(String(ok.body), /# TYPE workmesh_queue_jobs gauge/);
+    assert.equal((await call("GET", "/ops/metrics")).status, 401);
+    assert.equal(
+      (await call("GET", "/metrics")).status,
+      404,
+      "there is no unauthenticated /metrics",
+    );
   });
 
   // Last on purpose: it exhausts the sign-in probe budget for this client address.

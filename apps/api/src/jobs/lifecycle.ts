@@ -98,7 +98,13 @@ export class JobLifecycle {
    * The UPDATE flips the winners to `running`, bumps the attempt number and sets the lease
    * deadline; the INSERT records the attempt. All in one statement.
    */
-  async claim(workerId: string, jobTypes: string[], limit: number): Promise<Job[]> {
+  async claim(
+    workerId: string,
+    jobTypes: string[],
+    limit: number,
+    /** A worker only ever receives jobs of its own account. */
+    account = "default",
+  ): Promise<Job[]> {
     const result = await this.db.query<JobRow>(
       `WITH picked AS (
          SELECT id AS pid FROM (
@@ -106,7 +112,8 @@ export class JobLifecycle {
            FROM (SELECT DISTINCT unnest($1::text[]) AS type) AS wanted
            CROSS JOIN LATERAL (
              SELECT id, claim_rank, run_at, created_at FROM jobs
-             WHERE status = 'queued' AND type = wanted.type AND run_at <= now()
+             WHERE status = 'queued' AND type = wanted.type AND account = $5
+               AND run_at <= now()
              ORDER BY claim_rank DESC, run_at, created_at, id
              LIMIT $2
              FOR UPDATE SKIP LOCKED
@@ -130,7 +137,7 @@ export class JobLifecycle {
          SELECT id, attempt_count, $3::uuid FROM claimed
        )
        SELECT ${COLUMNS} FROM claimed`,
-      [jobTypes, limit, workerId, this.config.leaseMs],
+      [jobTypes, limit, workerId, this.config.leaseMs, account],
     );
     // Row order from a CTE is unspecified; present the jobs in claim order.
     const rank = (row: JobRow): number => row.priority * 60 - row.run_at.getTime() / 1000;

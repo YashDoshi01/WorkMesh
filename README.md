@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 6** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
+**Current milestone: Phase 8** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
 
 ## Architecture (target)
 
@@ -62,6 +62,7 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 | `npm run dev:dashboard`    | Run the dashboard dev server on http://localhost:5173                         |
 | `npm run build:dashboard`  | Typecheck and build the dashboard to `apps/dashboard/dist`                    |
 | `npm run test:dashboard`   | Dashboard tests (Vitest + Testing Library)                                    |
+| `npm run keys -- <create   | list                                                                          | revoke>` | Create, list and revoke machine API keys (needs the API running and `OPERATOR_API_KEY`) |
 | `npm run gateway:up`       | Build and start NGINX + 2 API instances + PostgreSQL on http://localhost:8080 |
 | `npm run gateway:down`     | Stop that stack                                                               |
 | `npm run gateway:logs`     | Follow the stack's logs (NGINX logs JSON per request)                         |
@@ -95,6 +96,7 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Gateway and scaling](docs/GATEWAY.md)
+- [Security](docs/SECURITY.md), [threat model](docs/THREAT_MODEL.md), [observability](docs/OBSERVABILITY.md)
 - [Decisions](docs/DECISIONS.md)
 - [Learning log](docs/LEARNING_LOG.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
@@ -104,6 +106,8 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 MIT. See [LICENSE](LICENSE).
 
 ## Job API (Phase 1)
+
+> **Since Phase 8 every machine endpoint needs an API key** (`Authorization: Bearer wm_...`; create one with `npm run keys -- create client`). The `curl` examples in the Phase 1-5 sections below were written before that; add `-H "authorization: Bearer $KEY"` (and use a `worker` key for the worker routes). See "API keys and security (Phase 8)" at the end.
 
 ```bash
 npm run db:up && npm run dev:api
@@ -206,3 +210,20 @@ npm run test:gateway                     # automated version of all of the above
 ```
 
 Everything enters through NGINX on port 8080; the API containers publish no ports. Both API containers run the same image and share one PostgreSQL, so a job created through one is visible through the other. Behaviour, measured numbers and limitations (NGINX is a single point of failure; health checks are passive; containers on one laptop are not separate machines): [`docs/GATEWAY.md`](docs/GATEWAY.md). The dashboard now lives at `/dashboard/`.
+
+## API keys and security (Phase 8)
+
+```bash
+npm run gateway:up                                           # rebuild so the new code and migration 0009 are applied
+npm run keys -- create worker --account default --name "my laptop"     # prints the key ONCE
+npm run keys -- create client --account default --name "demo client"
+npm run keys -- list
+```
+
+```powershell
+$env:WORKMESH_API_URL = "http://localhost:8080"; $env:WORKMESH_API_KEY = "<the worker key>"; npm run dev:worker
+$h = @{ Authorization = "Bearer <the client key>" }
+Invoke-RestMethod -Method Post -Uri http://localhost:8080/jobs -Headers $h -ContentType "application/json" -Body '{"type":"email.send","payload":{"to":"a@b.c"}}'
+```
+
+Keys are stored only as SHA-256 digests, can be revoked instantly on every instance, and are bound to an **account**: a client sees only its own jobs and a worker only claims its account's jobs. Logs never contain keys or payloads. `GET /ops/metrics` (viewer key) exposes queue depth, wait and run times, retries, failures, workers and expired leases. Details and limitations: [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md), [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md).

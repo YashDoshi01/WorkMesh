@@ -26,6 +26,7 @@ interface DueRow {
   payload: Record<string, unknown>;
   priority: number;
   max_attempts: number;
+  account: string;
   next_run_at: Date;
 }
 
@@ -74,7 +75,7 @@ export class Scheduler {
       await client.query("BEGIN");
       const now = at ?? (await client.query<{ t: Date }>("SELECT now() AS t")).rows[0]!.t;
       const due = await client.query<DueRow>(
-        `SELECT id, name, cron, timezone, job_type, payload, priority, max_attempts, next_run_at
+        `SELECT id, name, cron, timezone, job_type, payload, priority, max_attempts, account, next_run_at
          FROM schedules
          WHERE enabled AND next_run_at <= $1::timestamptz
          ORDER BY next_run_at
@@ -93,8 +94,8 @@ export class Scheduler {
           const occurrence = latest.getTime() >= s.next_run_at.getTime() ? latest : s.next_run_at;
           const inserted = await client.query<{ id: string }>(
             `INSERT INTO jobs
-               (type, payload, priority, max_attempts, run_at, scheduled_for, schedule_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+               (type, payload, priority, max_attempts, run_at, scheduled_for, schedule_id, account)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL DO NOTHING
              RETURNING id`,
             [
@@ -105,6 +106,7 @@ export class Scheduler {
               now,
               occurrence,
               s.id,
+              s.account,
             ],
           );
           await client.query(

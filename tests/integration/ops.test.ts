@@ -32,6 +32,15 @@ const ROUTES: {
   { method: "GET", path: "/stats", role: "viewer", example: "/ops/stats" },
   { method: "GET", path: "/workers", role: "viewer", example: "/ops/workers" },
   { method: "GET", path: "/audit", role: "viewer", example: "/ops/audit" },
+  { method: "GET", path: "/metrics", role: "viewer", example: "/ops/metrics" },
+  { method: "GET", path: "/keys", role: "viewer", example: "/ops/keys" },
+  { method: "POST", path: "/keys", role: "operator", example: "/ops/keys" },
+  {
+    method: "POST",
+    path: "/keys/:id/revoke",
+    role: "operator",
+    example: `/ops/keys/${ghostId}/revoke`,
+  },
   { method: "GET", path: "/jobs", role: "viewer", example: "/ops/jobs" },
   { method: "GET", path: "/jobs/:id", role: "viewer", example: `/ops/jobs/${ghostId}` },
   {
@@ -225,7 +234,7 @@ describe("operator plane (PostgreSQL)", () => {
       }
     });
 
-    it("the machine plane is unchanged: workers and programmatic clients need no key (until Phase 8)", async () => {
+    it("with machine authentication switched off (as in these older tests) the machine plane needs no key", async () => {
       assert.equal((await machinePost("/jobs", { type: "x", payload: {} })).status, 201);
       assert.equal((await api(started.url, "GET", "/healthz")).status, 200);
     });

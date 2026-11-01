@@ -2,6 +2,8 @@ import type { Db } from "../db/pool.js";
 import { withTransaction, type Tx } from "../db/tx.js";
 import { COLUMNS, toJob, type Job, type JobRepository, type JobRow } from "../jobs/repository.js";
 import type { CreateJobInput } from "../jobs/schema.js";
+import type { ApiKey, ApiKeyRepository } from "../keys/repository.js";
+import type { CreateKeyInput } from "../keys/schema.js";
 import type { Schedule, ScheduleRepository } from "../schedules/repository.js";
 import type { WorkflowDetail, WorkflowRepository } from "../workflows/repository.js";
 import type { Principal } from "./auth.js";
@@ -36,12 +38,64 @@ export class OpsActions {
     private readonly workflows: WorkflowRepository,
     private readonly schedules: ScheduleRepository,
     private readonly audit: AuditRepository,
+    private readonly keys: ApiKeyRepository,
   ) {}
 
-  /** One-off job submission from the dashboard. Payloads are never written to the audit log. */
-  async submitJob(ctx: Context, input: CreateJobInput): Promise<Job> {
+  /**
+   * Creates a machine API key. The secret is returned ONCE to the caller and appears nowhere else:
+   * the audit record holds the key's id, prefix, kind, account and name, never the secret.
+   */
+  async createKey(ctx: Context, input: CreateKeyInput): Promise<{ key: ApiKey; secret: string }> {
     return withTransaction(this.db, async (tx) => {
-      const job = await this.jobs.create(input, tx);
+      const created = await this.keys.create(tx, {
+        kind: input.kind,
+        account: input.account,
+        name: input.name,
+        jobTypes: input.jobTypes ?? null,
+        expiresInDays: input.expiresInDays ?? null,
+        createdBy: ctx.principal.actor,
+      });
+      await this.audit.record(tx, ctx.principal, {
+        action: "key.create",
+        targetType: "api_key",
+        targetId: created.key.id,
+        details: {
+          prefix: created.key.prefix,
+          kind: created.key.kind,
+          account: created.key.account,
+          name: created.key.name,
+          expiresAt: created.key.expiresAt,
+        },
+        requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
+      });
+      return created;
+    });
+  }
+
+  /** Revokes a key at once, on every API instance. Repeating it is harmless and not re-audited. */
+  async revokeKey(ctx: Context, id: string): Promise<ActionResult<ApiKey>> {
+    return withTransaction(this.db, async (tx): Promise<ActionResult<ApiKey>> => {
+      const before = await this.keys.findById(id, tx);
+      if (!before) return { outcome: "not_found" };
+      if (before.status === "revoked") return { outcome: "ok", value: before };
+      const key = (await this.keys.revoke(tx, id, ctx.principal.actor))!;
+      await this.audit.record(tx, ctx.principal, {
+        action: "key.revoke",
+        targetType: "api_key",
+        targetId: id,
+        details: { prefix: key.prefix, kind: key.kind, account: key.account, name: key.name },
+        requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
+      });
+      return { outcome: "ok", value: key };
+    });
+  }
+
+  /** One-off job submission from the dashboard. Payloads are never written to the audit log. */
+  async submitJob(ctx: Context, input: CreateJobInput, account = "default"): Promise<Job> {
+    return withTransaction(this.db, async (tx) => {
+      const job = await this.jobs.create(input, { account, requestId: ctx.requestId }, tx);
       await this.audit.record(tx, ctx.principal, {
         action: "job.submit",
         targetType: "job",
@@ -51,6 +105,7 @@ export class OpsActions {
           priority: job.priority,
           maxAttempts: job.maxAttempts,
           scheduledFor: job.scheduledFor,
+          account,
         },
         requestId: ctx.requestId,
         clientIp: ctx.clientIp,

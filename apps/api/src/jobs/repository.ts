@@ -22,6 +22,10 @@ export interface Job {
   startedAt: string | null;
   finishedAt: string | null;
   lastError: string | null;
+  /** The account that owns this job; clients can only see their own account's jobs. */
+  account: string;
+  /** The HTTP request that enqueued it (null for jobs created by a schedule or a workflow). */
+  requestId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,12 +47,14 @@ export interface JobRow {
   started_at: Date | null;
   finished_at: Date | null;
   last_error: string | null;
+  account: string;
+  request_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
 
 export const COLUMNS =
-  "id, type, payload, status, priority, run_at, scheduled_for, schedule_id, workflow_id, attempt_count, max_attempts, lease_expires_at, claimed_by, started_at, finished_at, last_error, created_at, updated_at";
+  "id, type, payload, status, priority, run_at, scheduled_for, schedule_id, workflow_id, attempt_count, max_attempts, lease_expires_at, claimed_by, started_at, finished_at, last_error, account, request_id, created_at, updated_at";
 
 // Postgres timestamps have microsecond precision; JS Dates only milliseconds.
 // The pagination cursor must keep full precision or rows could be skipped/repeated.
@@ -72,6 +78,8 @@ export function toJob(row: JobRow): Job {
     startedAt: row.started_at?.toISOString() ?? null,
     finishedAt: row.finished_at?.toISOString() ?? null,
     lastError: row.last_error,
+    account: row.account,
+    requestId: row.request_id,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -112,14 +120,25 @@ function decodeCursor(cursor: string): [string, string] {
   throw new InvalidCursorError("cursor is not valid");
 }
 
+/** Who a new job belongs to. */
+export interface JobOwner {
+  account: string;
+  requestId?: string | undefined;
+}
+export const DEFAULT_OWNER: JobOwner = { account: "default" };
+
 export class JobRepository {
   constructor(private readonly db: Db) {}
 
   /** A single INSERT is atomic on its own; the row is committed before this resolves. */
-  async create(input: CreateJobInput, q: Queryable = this.db): Promise<Job> {
+  async create(
+    input: CreateJobInput,
+    owner: JobOwner = DEFAULT_OWNER,
+    q: Queryable = this.db,
+  ): Promise<Job> {
     const result = await q.query<JobRow>(
-      `INSERT INTO jobs (type, payload, priority, run_at, scheduled_for, max_attempts)
-       SELECT $1, $2, $3, t.at, t.at, $5
+      `INSERT INTO jobs (type, payload, priority, run_at, scheduled_for, max_attempts, account, request_id)
+       SELECT $1, $2, $3, t.at, t.at, $5, $6, $7
        FROM (SELECT COALESCE($4::timestamptz, now()) AS at) AS t
        RETURNING ${COLUMNS}`,
       [
@@ -128,6 +147,8 @@ export class JobRepository {
         input.priority,
         input.runAt ?? null,
         input.maxAttempts,
+        owner.account,
+        owner.requestId ?? null,
       ],
     );
     return toJob(result.rows[0]!);
@@ -145,11 +166,17 @@ export class JobRepository {
     type?: string | undefined;
     scheduleId?: string | undefined;
     workflowId?: string | undefined;
+    /** Only this account's jobs (clients). Omit to see all accounts (operators). */
+    account?: string | undefined;
     limit: number;
     cursor?: string | undefined;
   }): Promise<JobPage> {
     const where: string[] = [];
     const params: unknown[] = [];
+    if (filter.account) {
+      params.push(filter.account);
+      where.push(`account = $${params.length}`);
+    }
     if (filter.status) {
       params.push(filter.status);
       where.push(`status = $${params.length}`);

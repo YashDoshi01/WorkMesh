@@ -40,7 +40,12 @@ const trustProxy = parseTrustProxy(env.TRUST_PROXY);
 const server = createApp(
   db,
   lifecycle,
-  { operatorKey: env.OPERATOR_API_KEY, viewerKey: env.VIEWER_API_KEY },
+  {
+    operatorKey: env.OPERATOR_API_KEY,
+    viewerKey: env.VIEWER_API_KEY,
+    // Workers and customer clients must present a valid API key. Never switch this off here.
+    machineAuth: true,
+  },
   {
     // The header naming the instance is opt-in: an explicit INSTANCE_ID, never the hostname.
     ...(env.INSTANCE_ID ? { instanceId: env.INSTANCE_ID } : {}),

@@ -25,6 +25,8 @@ export interface Progress {
 export interface WorkflowSummary {
   id: string;
   name: string;
+  /** The account that owns this workflow and all of its jobs. */
+  account: string;
   status: WorkflowStatus;
   /** True once cancellation was requested, even while running jobs are still finishing. */
   cancelRequested: boolean;
@@ -59,6 +61,7 @@ export type CancelResult =
 interface SummaryRow {
   id: string;
   name: string;
+  account: string;
   status: WorkflowStatus;
   cancel_requested_at: Date | null;
   created_at: Date;
@@ -76,7 +79,7 @@ interface SummaryRow {
 // Progress is DERIVED on every read from node status + job status. Nothing is stored that
 // could drift out of step with the jobs.
 const SUMMARY_SELECT = `
-  SELECT w.id, w.name, w.status, w.cancel_requested_at, w.created_at, w.finished_at,
+  SELECT w.id, w.name, w.account, w.status, w.cancel_requested_at, w.created_at, w.finished_at,
     count(n.id)::int AS total,
     count(*) FILTER (WHERE n.status = 'waiting')::int AS waiting,
     count(*) FILTER (WHERE n.status = 'skipped')::int AS skipped,
@@ -93,6 +96,7 @@ function toSummary(r: SummaryRow): WorkflowSummary {
   return {
     id: r.id,
     name: r.name,
+    account: r.account,
     status: r.status,
     cancelRequested: r.cancel_requested_at !== null,
     createdAt: r.created_at.toISOString(),
@@ -119,11 +123,11 @@ export class WorkflowRepository {
    * a crash half-way can never leave a workflow with missing edges (which would let a node
    * run too early).
    */
-  async create(input: CreateWorkflowInput): Promise<WorkflowDetail> {
+  async create(input: CreateWorkflowInput, account = "default"): Promise<WorkflowDetail> {
     const { detail, summary } = await withTransaction(this.db, async (tx) => {
       const wf = await tx.query<{ id: string }>(
-        `INSERT INTO workflows (name) VALUES ($1) RETURNING id`,
-        [input.name],
+        `INSERT INTO workflows (name, account) VALUES ($1, $2) RETURNING id`,
+        [input.name, account],
       );
       const id = wf.rows[0]!.id;
       const nodesJson = JSON.stringify(input.nodes);
@@ -166,17 +170,19 @@ export class WorkflowRepository {
   async list(filter: {
     status?: WorkflowStatus | undefined;
     limit: number;
+    /** Only this account's workflows (clients). Omit for all (operators). */
+    account?: string | undefined;
   }): Promise<WorkflowSummary[]> {
     const result = await this.db.query<SummaryRow>(
       `${SUMMARY_SELECT}
        WHERE w.id IN (
          SELECT id FROM workflows
-         WHERE ($1::text IS NULL OR status = $1)
+         WHERE ($1::text IS NULL OR status = $1) AND ($3::text IS NULL OR account = $3)
          ORDER BY created_at DESC, id DESC
          LIMIT $2)
        GROUP BY w.id
        ORDER BY w.created_at DESC, w.id DESC`,
-      [filter.status ?? null, filter.limit],
+      [filter.status ?? null, filter.limit, filter.account ?? null],
     );
     return result.rows.map(toSummary);
   }

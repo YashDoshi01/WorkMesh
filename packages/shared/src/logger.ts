@@ -1,11 +1,13 @@
+import { redact, redactString } from "./redact.js";
+
 export type LogFields = Record<string, unknown>;
 
 function write(level: "info" | "warn" | "error", message: string, fields?: LogFields): void {
   const record = {
     level,
-    msg: message,
+    msg: redactString(message),
     ts: new Date().toISOString(),
-    ...fields,
+    ...(fields ? (redact(fields) as LogFields) : {}),
   };
   const line = JSON.stringify(record);
   if (level === "error") {

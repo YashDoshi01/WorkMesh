@@ -5,6 +5,8 @@ import { generateInvoice, slowTask } from "./handlers.js";
 
 const worker = new Worker({
   apiUrl: process.env.WORKMESH_API_URL ?? "http://localhost:3000",
+  // A `worker` key from an operator (POST /ops/keys). See README, "API keys".
+  ...(process.env.WORKMESH_API_KEY ? { apiKey: process.env.WORKMESH_API_KEY } : {}),
   name: process.env.WORKER_NAME ?? "sample-worker",
   concurrency: Number(process.env.WORKER_CONCURRENCY ?? 2),
   pollIntervalMs: Number(process.env.WORKER_POLL_MS ?? 1000),

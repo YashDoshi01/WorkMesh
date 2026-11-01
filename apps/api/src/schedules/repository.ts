@@ -18,6 +18,8 @@ export interface Schedule {
   /** The next occurrence that has not been turned into a job yet. */
   nextRunAt: string;
   lastRunAt: string | null;
+  /** The account that owns this schedule and every job it creates. */
+  account: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -35,12 +37,13 @@ interface ScheduleRow {
   last_error: string | null;
   next_run_at: Date;
   last_run_at: Date | null;
+  account: string;
   created_at: Date;
   updated_at: Date;
 }
 
 const COLUMNS =
-  "id, name, cron, timezone, job_type, payload, priority, max_attempts, enabled, last_error, next_run_at, last_run_at, created_at, updated_at";
+  "id, name, cron, timezone, job_type, payload, priority, max_attempts, enabled, last_error, next_run_at, last_run_at, account, created_at, updated_at";
 
 function toSchedule(r: ScheduleRow): Schedule {
   return {
@@ -56,6 +59,7 @@ function toSchedule(r: ScheduleRow): Schedule {
     lastError: r.last_error,
     nextRunAt: r.next_run_at.toISOString(),
     lastRunAt: r.last_run_at?.toISOString() ?? null,
+    account: r.account,
     createdAt: r.created_at.toISOString(),
     updatedAt: r.updated_at.toISOString(),
   };
@@ -72,13 +76,13 @@ export class ScheduleRepository {
     return r.rows[0]!.t;
   }
 
-  async create(input: CreateScheduleInput): Promise<Schedule> {
+  async create(input: CreateScheduleInput, account = "default"): Promise<Schedule> {
     const next = nextOccurrenceAfter(input.cron, input.timezone, await this.dbNow());
     try {
       const r = await this.db.query<ScheduleRow>(
         `INSERT INTO schedules
-           (name, cron, timezone, job_type, payload, priority, max_attempts, enabled, next_run_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (name, cron, timezone, job_type, payload, priority, max_attempts, enabled, next_run_at, account)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING ${COLUMNS}`,
         [
           input.name,
@@ -90,6 +94,7 @@ export class ScheduleRepository {
           input.maxAttempts,
           input.enabled,
           next,
+          account,
         ],
       );
       return toSchedule(r.rows[0]!);
@@ -104,10 +109,11 @@ export class ScheduleRepository {
     return r.rows[0] ? toSchedule(r.rows[0]) : null;
   }
 
-  async list(limit: number): Promise<Schedule[]> {
+  async list(limit: number, account?: string): Promise<Schedule[]> {
     const r = await this.db.query<ScheduleRow>(
-      `SELECT ${COLUMNS} FROM schedules ORDER BY name LIMIT $1`,
-      [limit],
+      `SELECT ${COLUMNS} FROM schedules WHERE ($2::text IS NULL OR account = $2)
+       ORDER BY account, name LIMIT $1`,
+      [limit, account ?? null],
     );
     return r.rows.map(toSchedule);
   }

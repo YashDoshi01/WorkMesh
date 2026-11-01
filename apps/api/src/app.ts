@@ -6,6 +6,8 @@ import { JobRepository } from "./jobs/repository.js";
 import { jobRoutes } from "./jobs/routes.js";
 import { OpsActions } from "./ops/actions.js";
 import { AuditRepository } from "./ops/audit.js";
+import { ApiKeyRepository } from "./keys/repository.js";
+import { MachineAuth } from "./keys/auth.js";
 import { Authenticator } from "./ops/auth.js";
 import { OpsQueries } from "./ops/queries.js";
 import { opsRoutes } from "./ops/routes.js";
@@ -20,6 +22,12 @@ export interface AppOptions {
   /** Keys for the operator plane (/ops/*). Without them the operator plane is not mounted. */
   operatorKey: string;
   viewerKey: string;
+  /**
+   * Require a valid API key on the machine plane (clients, workers). Always true in the real
+   * server. It is a required field, so no caller can forget to decide; `false` exists only for the
+   * test suites written before Phase 8.
+   */
+  machineAuth: boolean;
 }
 
 /** How long /readyz waits for the database before saying "not ready". */
@@ -86,11 +94,14 @@ export function createApp(
   const workflows = new WorkflowRepository(db);
   const schedules = new ScheduleRepository(db);
 
-  // Machine plane: workers and programmatic clients. Not authenticated until Phase 8.
-  app.use(jobRoutes(jobs, lifecycle));
-  app.use(scheduleRoutes(schedules));
-  app.use(workflowRoutes(workflows));
-  app.use(workerRoutes(new WorkerRepository(db), lifecycle));
+  // Machine plane: customer clients and workers. Each route declares the kind of API key it needs.
+  // (Without `options` at all, which only older tests do, it is left open.)
+  const keys = new ApiKeyRepository(db);
+  const machineAuth = new MachineAuth(options?.machineAuth ? keys : null);
+  app.use(jobRoutes(jobs, lifecycle, machineAuth));
+  app.use(scheduleRoutes(schedules, machineAuth));
+  app.use(workflowRoutes(workflows, machineAuth));
+  app.use(workerRoutes(new WorkerRepository(db), lifecycle, machineAuth));
 
   // Operator plane: the dashboard. Every route needs an API key (see ops/routes.ts).
   if (options) {
@@ -99,7 +110,8 @@ export function createApp(
       "/ops",
       opsRoutes({
         auth: new Authenticator(options),
-        actions: new OpsActions(db, jobs, workflows, schedules, audit),
+        actions: new OpsActions(db, jobs, workflows, schedules, audit, keys),
+        keys,
         audit,
         queries: new OpsQueries(db),
         jobs,

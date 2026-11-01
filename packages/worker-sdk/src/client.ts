@@ -47,12 +47,17 @@ export class WorkMeshClient {
     private readonly baseUrl: string,
     private readonly timeoutMs = 10_000,
     private readonly fetchImpl: typeof fetch = fetch,
+    /** A `worker` API key (wm_...). Sent as a Bearer token; never logged by the SDK. */
+    private readonly apiKey?: string,
   ) {}
 
   private async post(path: string, body: unknown): Promise<unknown> {
     const res = await this.fetchImpl(new URL(path, this.baseUrl), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
+      },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.timeoutMs),
     });

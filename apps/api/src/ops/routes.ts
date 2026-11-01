@@ -5,6 +5,8 @@ import { HttpError } from "../http/errors.js";
 import { clientIp } from "../http/middleware.js";
 import { parse } from "../http/validate.js";
 import type { JobLifecycle } from "../jobs/lifecycle.js";
+import type { ApiKeyRepository } from "../keys/repository.js";
+import { accountSchema, createKeySchema } from "../keys/schema.js";
 import { InvalidCursorError, type JobRepository } from "../jobs/repository.js";
 import { createJobSchema, jobIdSchema, listJobsQuerySchema } from "../jobs/schema.js";
 import { patchScheduleSchema, listSchedulesQuerySchema } from "../schedules/schema.js";
@@ -14,6 +16,7 @@ import { listWorkflowsQuerySchema } from "../workflows/schema.js";
 import type { OpsActions, ActionResult } from "./actions.js";
 import type { AuditRepository } from "./audit.js";
 import { principalOf, requireRole, type Authenticator } from "./auth.js";
+import { renderMetrics } from "./metrics.js";
 import { WORKER_STALE_AFTER_MS, type OpsQueries } from "./queries.js";
 
 const retryBodySchema = z.strictObject({ attempts: z.number().int().min(1).max(20).default(1) });
@@ -39,8 +42,14 @@ function unwrap<T>(result: ActionResult<T>, what: string): T {
   throw new HttpError(409, result.code, result.message);
 }
 
+const opsSubmitSchema = createJobSchema.extend({ account: accountSchema.default("default") });
+const metricsQuerySchema = z.strictObject({
+  windowMinutes: z.coerce.number().int().min(1).max(1440).default(15),
+});
+
 export interface OpsDeps {
   auth: Authenticator;
+  keys: ApiKeyRepository;
   actions: OpsActions;
   audit: AuditRepository;
   queries: OpsQueries;
@@ -79,6 +88,20 @@ export function opsRoutes(d: OpsDeps): Router {
   router.get("/stats", viewer, async (req, res) => {
     const { windowMinutes } = parse(statsQuerySchema, req.query, "query parameters");
     res.json(await d.queries.stats(windowMinutes));
+  });
+
+  // Prometheus scrape target. Needs a viewer key (Prometheus can send a bearer token). Values come
+  // from the database, so any instance answers the same; see ops/metrics.ts.
+  router.get("/metrics", viewer, async (req, res) => {
+    const { windowMinutes } = parse(metricsQuerySchema, req.query, "query parameters");
+    res
+      .type("text/plain; version=0.0.4; charset=utf-8")
+      .send(renderMetrics(await d.queries.stats(windowMinutes)));
+  });
+
+  // API keys (metadata only: the secret is never stored, so it can never be listed).
+  router.get("/keys", viewer, async (_req, res) => {
+    res.json({ items: await d.keys.list() });
   });
 
   router.get("/workers", viewer, async (req, res) => {
@@ -151,14 +174,41 @@ export function opsRoutes(d: OpsDeps): Router {
   });
 
   router.post("/jobs", operator, async (req, res) => {
-    const input = parse(createJobSchema, req.body, "job");
-    const job = await d.actions.submitJob(ctx(req), input);
+    const { account, ...input } = parse(opsSubmitSchema, req.body, "job");
+    const job = await d.actions.submitJob(ctx(req), input, account);
     logInfo("ops_job_submitted", {
       requestId: req.requestId,
       actor: principalOf(req).actor,
       jobId: job.id,
     });
     res.status(201).location(`/ops/jobs/${job.id}`).json(job);
+  });
+
+  router.post("/keys", operator, async (req, res) => {
+    const input = parse(createKeySchema, req.body, "API key");
+    const { key, secret } = await d.actions.createKey(ctx(req), input);
+    logInfo("api_key_created", {
+      requestId: req.requestId,
+      actor: principalOf(req).actor,
+      keyId: key.id,
+      keyPrefix: key.prefix,
+      kind: key.kind,
+      account: key.account,
+    });
+    // The ONLY time the secret is ever shown.
+    res.status(201).json({ ...key, secret });
+  });
+
+  router.post("/keys/:id/revoke", operator, async (req, res) => {
+    const id = parse(jobIdSchema, req.params.id, "key id");
+    const key = unwrap(await d.actions.revokeKey(ctx(req), id), "key");
+    logInfo("api_key_revoked", {
+      requestId: req.requestId,
+      actor: principalOf(req).actor,
+      keyId: id,
+      keyPrefix: key.prefix,
+    });
+    res.json(key);
   });
 
   router.post("/jobs/:id/cancel", operator, async (req, res) => {

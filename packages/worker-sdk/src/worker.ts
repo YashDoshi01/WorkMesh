@@ -23,6 +23,8 @@ export type LogFn = (level: "info" | "warn" | "error", msg: string, fields?: obj
 export interface WorkerOptions {
   /** Base URL of the WorkMesh API, e.g. http://localhost:3000 */
   apiUrl: string;
+  /** A `worker` API key issued by an operator (POST /ops/keys). Required by a real server. */
+  apiKey?: string;
   name?: string;
   /** Max handlers running at once in this process. Default 1. */
   concurrency?: number;
@@ -84,7 +86,7 @@ export class Worker {
   private wake: (() => void) | undefined;
 
   constructor(options: WorkerOptions) {
-    this.client = new WorkMeshClient(options.apiUrl, 10_000, options.fetch);
+    this.client = new WorkMeshClient(options.apiUrl, 10_000, options.fetch, options.apiKey);
     this.name = options.name ?? `worker-${randomUUID().slice(0, 8)}`;
     this.concurrency = options.concurrency ?? 1;
     this.pollIntervalMs = options.pollIntervalMs ?? 1000;

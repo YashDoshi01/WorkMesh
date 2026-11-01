@@ -38,13 +38,21 @@ export async function setupTestDb(): Promise<Db> {
 }
 
 export async function resetTables(db: Db): Promise<void> {
-  await db.query("TRUNCATE jobs, workers, schedules, workflows, audit_log CASCADE");
+  await db.query("TRUNCATE jobs, workers, schedules, workflows, audit_log, api_keys CASCADE");
 }
 
 /** Operator-plane keys used by the tests. */
 export const OPERATOR_KEY = "test-operator-key-0123456789";
 export const VIEWER_KEY = "test-viewer-key-abcdefghij";
-export const TEST_AUTH: AppOptions = { operatorKey: OPERATOR_KEY, viewerKey: VIEWER_KEY };
+/** Operator plane on, machine plane OPEN: what the pre-Phase-8 suites were written against. */
+export const TEST_AUTH: AppOptions = {
+  operatorKey: OPERATOR_KEY,
+  viewerKey: VIEWER_KEY,
+  machineAuth: false,
+};
+
+/** Everything on, as in production: the machine plane needs API keys. */
+export const SECURE_AUTH: AppOptions = { ...TEST_AUTH, machineAuth: true };
 
 export interface Started {
   server: Server;
@@ -91,7 +99,13 @@ export async function api(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
-  return { status: res.status, body: text ? JSON.parse(text) : undefined, headers: res.headers };
+  // JSON for the API's own responses; anything else (the Prometheus text format) comes back as text.
+  const isJson = (res.headers.get("content-type") ?? "").includes("json");
+  return {
+    status: res.status,
+    body: text ? (isJson ? JSON.parse(text) : text) : undefined,
+    headers: res.headers,
+  };
 }
 
 export async function waitFor<T>(

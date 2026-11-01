@@ -108,8 +108,9 @@ export async function reconcileWorkflow(tx: Tx, workflowId: string): Promise<Rec
          RETURNING n.job_id, n.job_type, n.payload, n.priority, n.max_attempts, n.workflow_id
        )
        INSERT INTO jobs
-         (id, type, payload, priority, max_attempts, run_at, scheduled_for, workflow_id)
-       SELECT job_id, job_type, payload, priority, max_attempts, now(), now(), workflow_id
+         (id, type, payload, priority, max_attempts, run_at, scheduled_for, workflow_id, account)
+       SELECT job_id, job_type, payload, priority, max_attempts, now(), now(), workflow_id,
+              (SELECT account FROM workflows WHERE id = $1)
        FROM ready
        RETURNING id`,
       [workflowId],
