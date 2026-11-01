@@ -27,7 +27,10 @@ reaper.start();
 const scheduler = new Scheduler(db, env.SCHEDULER_INTERVAL_MS);
 scheduler.start();
 
-const server = createApp(db, lifecycle).listen(env.PORT, () => {
+const server = createApp(db, lifecycle, {
+  operatorKey: env.OPERATOR_API_KEY,
+  viewerKey: env.VIEWER_API_KEY,
+}).listen(env.PORT, () => {
   logInfo("api_listening", {
     port: env.PORT,
     leaseMs: env.LEASE_MS,

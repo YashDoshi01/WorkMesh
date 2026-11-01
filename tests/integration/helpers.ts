@@ -8,6 +8,7 @@ import {
   JobLifecycle,
   migrate,
   type Db,
+  type AppOptions,
   type LifecycleConfig,
 } from "@workmesh/api";
 
@@ -36,8 +37,13 @@ export async function setupTestDb(): Promise<Db> {
 }
 
 export async function resetTables(db: Db): Promise<void> {
-  await db.query("TRUNCATE jobs, workers, schedules, workflows CASCADE");
+  await db.query("TRUNCATE jobs, workers, schedules, workflows, audit_log CASCADE");
 }
+
+/** Operator-plane keys used by the tests. */
+export const OPERATOR_KEY = "test-operator-key-0123456789";
+export const VIEWER_KEY = "test-viewer-key-abcdefghij";
+export const TEST_AUTH: AppOptions = { operatorKey: OPERATOR_KEY, viewerKey: VIEWER_KEY };
 
 export interface Started {
   server: Server;
@@ -48,9 +54,14 @@ export function lifecycleFor(db: Db, config: Partial<LifecycleConfig> = {}): Job
   return new JobLifecycle(db, { ...DEFAULT_LIFECYCLE_CONFIG, ...config });
 }
 
-export function startApi(db: Db, config: Partial<LifecycleConfig> = {}): Promise<Started> {
+export function startApi(
+  db: Db,
+  config: Partial<LifecycleConfig> = {},
+  /** Pass `null` for an app WITHOUT the operator plane (undefined would select the default keys). */
+  options: AppOptions | null = TEST_AUTH,
+): Promise<Started> {
   return new Promise((resolve) => {
-    const server = createApp(db, lifecycleFor(db, config)).listen(0, () => {
+    const server = createApp(db, lifecycleFor(db, config), options ?? undefined).listen(0, () => {
       resolve({ server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
     });
   });
@@ -67,14 +78,15 @@ export async function api(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
-): Promise<{ status: number; body: any }> {
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: any; headers: Headers }> {
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
-  return { status: res.status, body: text ? JSON.parse(text) : undefined };
+  return { status: res.status, body: text ? JSON.parse(text) : undefined, headers: res.headers };
 }
 
 export async function waitFor<T>(

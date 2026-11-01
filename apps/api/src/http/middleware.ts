@@ -50,6 +50,7 @@ function bodyParserError(err: unknown): HttpError | undefined {
 export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const http = err instanceof HttpError ? err : bodyParserError(err);
   if (http) {
+    for (const [name, value] of Object.entries(http.headers ?? {})) res.setHeader(name, value);
     res.status(http.status).json({
       error: {
         code: http.code,

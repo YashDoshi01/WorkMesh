@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 5** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. There is no dashboard or auth yet.
+**Current milestone: Phase 6** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically, and workflows run groups of jobs in dependency order. A React dashboard (operator plane, API-key roles, audit log) lets a human watch and control it. Workers and programmatic clients are not authenticated until Phase 8.
 
 ## Architecture (target)
 
@@ -59,6 +59,9 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 | `npm run test:integration` | Integration tests (needs `npm run db:up`; uses database `workmesh_test`) |
 | `npm run dev:worker`       | Run the sample worker (needs the API running)                            |
 | `npm run dev:api`          | Run the API (applies migrations on start)                                |
+| `npm run dev:dashboard`    | Run the dashboard dev server on http://localhost:5173                    |
+| `npm run build:dashboard`  | Typecheck and build the dashboard to `apps/dashboard/dist`               |
+| `npm run test:dashboard`   | Dashboard tests (Vitest + Testing Library)                               |
 | `npm run db:up`            | Start PostgreSQL                                                         |
 | `npm run db:down`          | Stop PostgreSQL                                                          |
 | `npm run db:logs`          | Follow Postgres logs                                                     |
@@ -177,3 +180,12 @@ curl -X POST localhost:3000/workflows/<id>/cancel       # skip what has not star
 ```
 
 A node runs only after everything it depends on has **succeeded**; its job does not even exist until then. A cycle is rejected (`dependency cycle: a -> b -> a`). If a node fails for good, everything downstream is skipped while independent branches finish, and the workflow ends `failed`. Cancelling withdraws queued work but lets running jobs finish. Full semantics, limits and what is _not_ provided (e.g. results are not passed between nodes): [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md). No new environment variables.
+
+## Dashboard (Phase 6)
+
+```bash
+# add OPERATOR_API_KEY and VIEWER_API_KEY to .env first (see .env.example); the API will not start without them
+npm run dev:api & npm run dev:worker & npm run dev:dashboard     # then open http://localhost:5173
+```
+
+Sign in with the viewer key (read-only) or the operator key (can submit, cancel, retry, enable/disable). It shows queue depth, throughput, failures, retries and timing percentiles from the real database, a chart of jobs finished, jobs with attempt history, workflows, schedules, worker health and an audit log of every change made from it. The server enforces every rule: for example a running job cannot be cancelled and a job inside a workflow cannot be retried, whatever the UI offers. Details, screens and security notes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md). The operator endpoints live under `/ops/*` and need `Authorization: Bearer <key>`; the machine endpoints (workers, `POST /jobs`, ...) are unchanged and **still unauthenticated** until Phase 8.

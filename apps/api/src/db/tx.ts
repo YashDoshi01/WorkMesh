@@ -21,3 +21,6 @@ export async function withTransaction<T>(db: Db, fn: (tx: Tx) => Promise<T>): Pr
     tx.release();
   }
 }
+
+/** Anything that can run a query: the pool, or a connection inside a transaction. */
+export type Queryable = Pick<Db, "query"> | Tx;

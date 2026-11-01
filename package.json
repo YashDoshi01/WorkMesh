@@ -11,6 +11,7 @@
   "packageManager": "npm@11.11.0",
   "workspaces": [
     "apps/api",
+    "apps/dashboard",
     "apps/sample-worker",
     "packages/shared",
     "packages/worker-sdk"
@@ -26,7 +27,10 @@
     "db:logs": "docker compose -f infra/compose.yaml logs -f postgres",
     "dev:api": "tsx --env-file=.env apps/api/src/server.ts",
     "test:integration": "tsx --env-file-if-exists=.env --test --test-concurrency=1 tests/integration/*.test.ts",
-    "dev:worker": "tsx --env-file=.env apps/sample-worker/src/main.ts"
+    "dev:worker": "tsx --env-file=.env apps/sample-worker/src/main.ts",
+    "dev:dashboard": "npm run dev -w @workmesh/dashboard",
+    "build:dashboard": "npm run build -w @workmesh/dashboard",
+    "test:dashboard": "npm run test -w @workmesh/dashboard"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,4 +1,5 @@
 import type { Db } from "../db/pool.js";
+import type { Queryable } from "../db/tx.js";
 import type { CreateJobInput, JobStatus } from "./schema.js";
 
 export interface Job {
@@ -115,8 +116,8 @@ export class JobRepository {
   constructor(private readonly db: Db) {}
 
   /** A single INSERT is atomic on its own; the row is committed before this resolves. */
-  async create(input: CreateJobInput): Promise<Job> {
-    const result = await this.db.query<JobRow>(
+  async create(input: CreateJobInput, q: Queryable = this.db): Promise<Job> {
+    const result = await q.query<JobRow>(
       `INSERT INTO jobs (type, payload, priority, run_at, scheduled_for, max_attempts)
        SELECT $1, $2, $3, t.at, t.at, $5
        FROM (SELECT COALESCE($4::timestamptz, now()) AS at) AS t

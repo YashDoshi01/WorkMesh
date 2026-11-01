@@ -1,4 +1,5 @@
 import type { Db } from "../db/pool.js";
+import type { Queryable } from "../db/tx.js";
 import { nextOccurrenceAfter } from "./cron.js";
 import type { CreateScheduleInput } from "./schema.js";
 
@@ -66,8 +67,8 @@ export class ScheduleRepository {
   constructor(private readonly db: Db) {}
 
   /** The database clock is the single time source for scheduling decisions. */
-  private async dbNow(): Promise<Date> {
-    const r = await this.db.query<{ t: Date }>("SELECT now() AS t");
+  private async dbNow(q: Queryable = this.db): Promise<Date> {
+    const r = await q.query<{ t: Date }>("SELECT now() AS t");
     return r.rows[0]!.t;
   }
 
@@ -98,10 +99,8 @@ export class ScheduleRepository {
     }
   }
 
-  async findById(id: string): Promise<Schedule | null> {
-    const r = await this.db.query<ScheduleRow>(`SELECT ${COLUMNS} FROM schedules WHERE id = $1`, [
-      id,
-    ]);
+  async findById(id: string, q: Queryable = this.db): Promise<Schedule | null> {
+    const r = await q.query<ScheduleRow>(`SELECT ${COLUMNS} FROM schedules WHERE id = $1`, [id]);
     return r.rows[0] ? toSchedule(r.rows[0]) : null;
   }
 
@@ -118,13 +117,13 @@ export class ScheduleRepository {
    * fire a catch-up run the moment it is switched back on. (Downtime of the SCHEDULER is
    * different: that does catch up, once. See Scheduler.)
    */
-  async setEnabled(id: string, enabled: boolean): Promise<Schedule | null> {
-    const current = await this.findById(id);
+  async setEnabled(id: string, enabled: boolean, q: Queryable = this.db): Promise<Schedule | null> {
+    const current = await this.findById(id, q);
     if (!current) return null;
     const next = enabled
-      ? nextOccurrenceAfter(current.cron, current.timezone, await this.dbNow())
+      ? nextOccurrenceAfter(current.cron, current.timezone, await this.dbNow(q))
       : new Date(current.nextRunAt);
-    const r = await this.db.query<ScheduleRow>(
+    const r = await q.query<ScheduleRow>(
       `UPDATE schedules SET enabled = $2, next_run_at = $3, last_error = NULL, updated_at = now()
        WHERE id = $1 RETURNING ${COLUMNS}`,
       [id, enabled, next],
@@ -133,8 +132,8 @@ export class ScheduleRepository {
   }
 
   /** Jobs it already created are kept (their schedule_id becomes NULL). */
-  async delete(id: string): Promise<boolean> {
-    const r = await this.db.query("DELETE FROM schedules WHERE id = $1", [id]);
+  async delete(id: string, q: Queryable = this.db): Promise<boolean> {
+    const r = await q.query("DELETE FROM schedules WHERE id = $1", [id]);
     return (r.rowCount ?? 0) > 0;
   }
 }

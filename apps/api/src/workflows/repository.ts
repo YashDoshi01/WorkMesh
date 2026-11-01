@@ -186,7 +186,11 @@ export class WorkflowRepository {
    * jobs already running are left to finish (they cannot be stopped safely), after which the
    * workflow becomes `cancelled`. Repeating the request is harmless.
    */
-  async cancel(id: string): Promise<CancelResult> {
+  async cancel(
+    id: string,
+    /** Runs inside the cancel transaction once cancellation took effect (the operator plane writes its audit record here, atomically). */
+    inTransaction?: (tx: Tx, workflow: WorkflowDetail) => Promise<void>,
+  ): Promise<CancelResult> {
     const outcome = await withTransaction(
       this.db,
       async (
@@ -212,7 +216,9 @@ export class WorkflowRepository {
           [id],
         );
         const summary = await reconcileWorkflow(tx, id);
-        return { kind: "ok", summary, detail: (await this.loadDetail(tx, id))! };
+        const detail = (await this.loadDetail(tx, id))!;
+        await inTransaction?.(tx, detail);
+        return { kind: "ok", summary, detail };
       },
     );
     if (outcome.kind === "not_found") return { outcome: "not_found" };
