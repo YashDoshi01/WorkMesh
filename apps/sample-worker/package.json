@@ -5,5 +5,11 @@
   "type": "module",
   "dependencies": {
     "@workmesh/worker-sdk": "*"
+  },
+  "exports": {
+    "./handlers": {
+      "types": "./src/handlers.ts",
+      "import": "./src/handlers.ts"
+    }
   }
 }

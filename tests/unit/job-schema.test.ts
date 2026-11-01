@@ -24,6 +24,20 @@ describe("createJobSchema", () => {
     }
   });
 
+  it("defaults maxAttempts to 3 and bounds it to 1-20 integers", () => {
+    assert.equal(createJobSchema.parse({ type: "x", payload: {} }).maxAttempts, 3);
+    for (const maxAttempts of [0, 21, 2.5, "3"]) {
+      assert.equal(
+        createJobSchema.safeParse({ type: "x", payload: {}, maxAttempts }).success,
+        false,
+      );
+    }
+    assert.equal(
+      createJobSchema.parse({ type: "x", payload: {}, maxAttempts: 20 }).maxAttempts,
+      20,
+    );
+  });
+
   it("rejects payloads over 64 KiB", () => {
     const r = createJobSchema.safeParse({ type: "x", payload: { blob: "a".repeat(70_000) } });
     assert.equal(r.success, false);

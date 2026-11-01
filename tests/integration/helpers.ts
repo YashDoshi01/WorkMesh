@@ -1,7 +1,15 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import pg from "pg";
-import { createApp, createPool, migrate, type Db } from "@workmesh/api";
+import {
+  createApp,
+  createPool,
+  DEFAULT_LIFECYCLE_CONFIG,
+  JobLifecycle,
+  migrate,
+  type Db,
+  type LifecycleConfig,
+} from "@workmesh/api";
 
 // Real PostgreSQL, never a mock. A dedicated database keeps tests away from dev data.
 const baseUrl = process.env.DATABASE_URL ?? "postgres://workmesh:workmesh@localhost:5432/workmesh";
@@ -36,9 +44,13 @@ export interface Started {
   url: string;
 }
 
-export function startApi(db: Db): Promise<Started> {
+export function lifecycleFor(db: Db, config: Partial<LifecycleConfig> = {}): JobLifecycle {
+  return new JobLifecycle(db, { ...DEFAULT_LIFECYCLE_CONFIG, ...config });
+}
+
+export function startApi(db: Db, config: Partial<LifecycleConfig> = {}): Promise<Started> {
   return new Promise((resolve) => {
-    const server = createApp(db).listen(0, () => {
+    const server = createApp(db, lifecycleFor(db, config)).listen(0, () => {
       resolve({ server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
     });
   });

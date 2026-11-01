@@ -1,0 +1,272 @@
+import type { Db } from "../db/pool.js";
+import { COLUMNS, toJob, type FinishResult, type Job, type JobRow } from "./repository.js";
+
+export interface LifecycleConfig {
+  /** How long a claim (or a renewal) keeps a job owned. */
+  leaseMs: number;
+  /** First retry delay; doubles each attempt. */
+  retryBaseMs: number;
+  /** Upper bound for the retry delay. */
+  retryMaxMs: number;
+}
+
+export const DEFAULT_LIFECYCLE_CONFIG: LifecycleConfig = {
+  leaseMs: 30_000,
+  retryBaseMs: 1000,
+  retryMaxMs: 300_000,
+};
+
+export interface JobAttempt {
+  attemptNumber: number;
+  workerId: string;
+  outcome: "running" | "succeeded" | "failed" | "lease_expired";
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+/**
+ * Exponential backoff with a cap and "equal jitter", evaluated in SQL so the
+ * delay is computed from the very attempt_count the UPDATE is acting on.
+ *   ceiling = min(cap, base * 2^(attempt-1));  delay = ceiling * uniform(0.5, 1)
+ * Jitter spreads retries out so many jobs that failed together do not all
+ * come back at the same instant (a retry storm).
+ */
+function backoffInterval(base: string, cap: string): string {
+  return `(LEAST(${cap}::double precision, ${base}::double precision * power(2, attempt_count - 1))
+           * (0.5 + random() * 0.5)) * interval '1 millisecond'`;
+}
+
+/**
+ * Everything that moves a job through running -> succeeded / queued (retry) / failed.
+ *
+ * Every transition is ONE SQL statement, so it is atomic, and is guarded by
+ * `status = 'running' AND claimed_by = worker AND attempt_count = attempt`.
+ * The attempt number is a fencing token: it increases on every claim, so a
+ * report from an older attempt can never touch the state of a newer one.
+ */
+export class JobLifecycle {
+  constructor(
+    private readonly db: Db,
+    readonly config: LifecycleConfig = DEFAULT_LIFECYCLE_CONFIG,
+  ) {}
+
+  /**
+   * Atomically hands up to `limit` eligible jobs to one worker.
+   *
+   * The inner SELECT locks the chosen rows (`FOR UPDATE`) and skips rows another
+   * transaction already locked (`SKIP LOCKED`), so concurrent claimers each get a
+   * different set. The UPDATE flips them to `running`, bumps the attempt number and
+   * sets the lease deadline; the INSERT records the attempt. All in one statement.
+   */
+  async claim(workerId: string, jobTypes: string[], limit: number): Promise<Job[]> {
+    const result = await this.db.query<JobRow>(
+      `WITH picked AS (
+         SELECT id AS pid FROM jobs
+         WHERE status = 'queued' AND run_at <= now() AND type = ANY($1::text[])
+         ORDER BY run_at, created_at, id
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       ),
+       claimed AS (
+         UPDATE jobs
+         SET status = 'running', claimed_by = $3::uuid, started_at = now(),
+             attempt_count = attempt_count + 1,
+             lease_expires_at = now() + ($4::int * interval '1 millisecond'),
+             updated_at = now()
+         FROM picked
+         WHERE jobs.id = picked.pid
+         RETURNING ${COLUMNS}
+       ),
+       recorded AS (
+         INSERT INTO job_attempts (job_id, attempt_number, worker_id)
+         SELECT id, attempt_count, $3::uuid FROM claimed
+       )
+       SELECT ${COLUMNS} FROM claimed`,
+      [jobTypes, limit, workerId, this.config.leaseMs],
+    );
+    // Row order from a CTE is unspecified; present the jobs in claim order.
+    return result.rows
+      .map(toJob)
+      .sort(
+        (a, b) =>
+          a.runAt.localeCompare(b.runAt) ||
+          a.createdAt.localeCompare(b.createdAt) ||
+          a.id.localeCompare(b.id),
+      );
+  }
+
+  /** Extends the lease, but only for the worker and attempt that currently own the job. */
+  async renewLease(id: string, workerId: string, attempt: number): Promise<FinishResult> {
+    // Deliberately allowed even if the deadline has just passed: until the recovery
+    // sweep actually takes the job back, a live owner may keep it. The sweep and this
+    // UPDATE both lock the row, so exactly one of them wins.
+    const result = await this.db.query<JobRow>(
+      `UPDATE jobs
+       SET lease_expires_at = now() + ($4::int * interval '1 millisecond')
+       WHERE id = $1 AND status = 'running' AND claimed_by = $2 AND attempt_count = $3
+       RETURNING ${COLUMNS}`,
+      [id, workerId, attempt, this.config.leaseMs],
+    );
+    const row = result.rows[0];
+    return row ? { outcome: "ok", job: toJob(row) } : this.notOwner(id);
+  }
+
+  /** Marks the attempt succeeded. Repeating the same report is a harmless no-op (200). */
+  async complete(id: string, workerId: string, attempt: number): Promise<FinishResult> {
+    const result = await this.db.query<JobRow>(
+      `WITH done AS (
+         UPDATE jobs
+         SET status = 'succeeded', finished_at = now(), lease_expires_at = NULL,
+             last_error = NULL, updated_at = now()
+         WHERE id = $1 AND status = 'running' AND claimed_by = $2 AND attempt_count = $3
+         RETURNING ${COLUMNS}
+       ),
+       recorded AS (
+         UPDATE job_attempts
+         SET outcome = 'succeeded', finished_at = now()
+         FROM done
+         WHERE job_attempts.job_id = done.id AND job_attempts.attempt_number = done.attempt_count
+       )
+       SELECT ${COLUMNS} FROM done`,
+      [id, workerId, attempt],
+    );
+    const row = result.rows[0];
+    return row
+      ? { outcome: "ok", job: toJob(row) }
+      : this.replayOrReject(id, workerId, attempt, "succeeded");
+  }
+
+  /**
+   * Records a failed attempt. If the failure is retryable and attempts remain, the job
+   * goes back to `queued` with run_at pushed out by the backoff; otherwise it becomes
+   * `failed` (the dead-letter state: it stays visible for a human, and is never retried).
+   */
+  async fail(
+    id: string,
+    workerId: string,
+    attempt: number,
+    error: string,
+    retryable: boolean,
+  ): Promise<FinishResult> {
+    const retry = `($5::boolean AND attempt_count < max_attempts)`;
+    const result = await this.db.query<JobRow>(
+      `WITH failed AS (
+         UPDATE jobs
+         SET status = CASE WHEN ${retry} THEN 'queued' ELSE 'failed' END,
+             run_at = CASE WHEN ${retry} THEN now() + ${backoffInterval("$6", "$7")} ELSE run_at END,
+             claimed_by = CASE WHEN ${retry} THEN NULL ELSE claimed_by END,
+             finished_at = CASE WHEN ${retry} THEN NULL ELSE now() END,
+             last_error = $4, lease_expires_at = NULL, updated_at = now()
+         WHERE id = $1 AND status = 'running' AND claimed_by = $2 AND attempt_count = $3
+         RETURNING ${COLUMNS}
+       ),
+       recorded AS (
+         UPDATE job_attempts
+         SET outcome = 'failed', error = $4, finished_at = now()
+         FROM failed
+         WHERE job_attempts.job_id = failed.id AND job_attempts.attempt_number = failed.attempt_count
+       )
+       SELECT ${COLUMNS} FROM failed`,
+      [id, workerId, attempt, error, retryable, this.config.retryBaseMs, this.config.retryMaxMs],
+    );
+    const row = result.rows[0];
+    return row
+      ? { outcome: "ok", job: toJob(row) }
+      : this.replayOrReject(id, workerId, attempt, "failed");
+  }
+
+  /**
+   * Takes back every job whose lease deadline has passed: retry with backoff if attempts
+   * remain, otherwise `failed`. Safe to run from many API instances at once: the SELECT
+   * uses FOR UPDATE SKIP LOCKED, so each expired job is recovered by exactly one sweeper,
+   * and the UPDATE re-checks the lease so a renewal that landed first wins.
+   */
+  async recoverExpired(batchSize = 100): Promise<Job[]> {
+    const retry = `attempt_count < max_attempts`;
+    const result = await this.db.query<JobRow>(
+      `WITH expired AS (
+         SELECT id AS eid FROM jobs
+         WHERE status = 'running' AND lease_expires_at < now()
+         ORDER BY lease_expires_at
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       ),
+       recovered AS (
+         UPDATE jobs
+         SET status = CASE WHEN ${retry} THEN 'queued' ELSE 'failed' END,
+             run_at = CASE WHEN ${retry} THEN now() + ${backoffInterval("$2", "$3")} ELSE run_at END,
+             claimed_by = CASE WHEN ${retry} THEN NULL ELSE claimed_by END,
+             finished_at = CASE WHEN ${retry} THEN NULL ELSE now() END,
+             last_error = 'lease expired: the worker stopped renewing its lease',
+             lease_expires_at = NULL, updated_at = now()
+         FROM expired
+         WHERE jobs.id = expired.eid AND jobs.status = 'running' AND jobs.lease_expires_at < now()
+         RETURNING ${COLUMNS}
+       ),
+       recorded AS (
+         UPDATE job_attempts
+         SET outcome = 'lease_expired', error = 'lease expired', finished_at = now()
+         FROM recovered
+         WHERE job_attempts.job_id = recovered.id AND job_attempts.attempt_number = recovered.attempt_count
+       )
+       SELECT ${COLUMNS} FROM recovered`,
+      [batchSize, this.config.retryBaseMs, this.config.retryMaxMs],
+    );
+    return result.rows.map(toJob);
+  }
+
+  async attempts(jobId: string): Promise<JobAttempt[] | null> {
+    const exists = await this.db.query("SELECT 1 FROM jobs WHERE id = $1", [jobId]);
+    if (exists.rowCount === 0) return null;
+    const result = await this.db.query<{
+      attempt_number: number;
+      worker_id: string;
+      outcome: JobAttempt["outcome"];
+      error: string | null;
+      started_at: Date;
+      finished_at: Date | null;
+    }>(
+      `SELECT attempt_number, worker_id, outcome, error, started_at, finished_at
+       FROM job_attempts WHERE job_id = $1 ORDER BY attempt_number`,
+      [jobId],
+    );
+    return result.rows.map((r) => ({
+      attemptNumber: r.attempt_number,
+      workerId: r.worker_id,
+      outcome: r.outcome,
+      error: r.error,
+      startedAt: r.started_at.toISOString(),
+      finishedAt: r.finished_at?.toISOString() ?? null,
+    }));
+  }
+
+  /** The guarded UPDATE matched nothing: distinguish "no such job" from "not yours (any more)". */
+  private async notOwner(id: string): Promise<FinishResult> {
+    const exists = await this.db.query("SELECT 1 FROM jobs WHERE id = $1", [id]);
+    return { outcome: exists.rowCount === 0 ? "not_found" : "conflict" };
+  }
+
+  /**
+   * Lost-acknowledgement handling. If the worker's earlier identical report already
+   * committed but the HTTP response was lost, the retry finds its own attempt already
+   * closed with the same outcome: answer success without changing anything.
+   */
+  private async replayOrReject(
+    id: string,
+    workerId: string,
+    attempt: number,
+    outcome: "succeeded" | "failed",
+  ): Promise<FinishResult> {
+    const prior = await this.db.query<{ worker_id: string; outcome: string }>(
+      `SELECT worker_id, outcome FROM job_attempts WHERE job_id = $1 AND attempt_number = $2`,
+      [id, attempt],
+    );
+    const row = prior.rows[0];
+    if (row && row.worker_id === workerId && row.outcome === outcome) {
+      const job = await this.db.query<JobRow>(`SELECT ${COLUMNS} FROM jobs WHERE id = $1`, [id]);
+      if (job.rows[0]) return { outcome: "ok", job: toJob(job.rows[0]) };
+    }
+    return this.notOwner(id);
+  }
+}

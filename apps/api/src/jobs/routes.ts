@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { HttpError } from "../http/errors.js";
 import { parse } from "../http/validate.js";
+import type { JobLifecycle } from "./lifecycle.js";
 import { InvalidCursorError, type JobRepository } from "./repository.js";
 import { createJobSchema, jobIdSchema, listJobsQuerySchema } from "./schema.js";
 
-export function jobRoutes(jobs: JobRepository): Router {
+export function jobRoutes(jobs: JobRepository, lifecycle: JobLifecycle): Router {
   const router = Router();
 
   router.post("/jobs", async (req, res) => {
@@ -18,6 +19,14 @@ export function jobRoutes(jobs: JobRepository): Router {
     const job = await jobs.findById(id);
     if (!job) throw new HttpError(404, "job_not_found", `Job ${id} does not exist`);
     res.json(job);
+  });
+
+  // The audit trail: one entry per execution attempt, oldest first.
+  router.get("/jobs/:id/attempts", async (req, res) => {
+    const id = parse(jobIdSchema, req.params.id, "job id");
+    const attempts = await lifecycle.attempts(id);
+    if (!attempts) throw new HttpError(404, "job_not_found", `Job ${id} does not exist`);
+    res.json({ items: attempts });
   });
 
   router.get("/jobs", async (req, res) => {

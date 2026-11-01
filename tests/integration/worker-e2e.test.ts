@@ -42,8 +42,8 @@ describe("submit -> claim -> execute -> complete (SDK worker, real PostgreSQL)",
     return w;
   };
 
-  const submit = async (type: string, payload: object = {}): Promise<string> =>
-    (await api(started.url, "POST", "/jobs", { type, payload })).body.id;
+  const submit = async (type: string, payload: object = {}, maxAttempts = 1): Promise<string> =>
+    (await api(started.url, "POST", "/jobs", { type, payload, maxAttempts })).body.id;
 
   const statusOf = async (id: string): Promise<any> =>
     (await api(started.url, "GET", `/jobs/${id}`)).body;

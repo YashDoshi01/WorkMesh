@@ -81,7 +81,7 @@ describe("jobs API (PostgreSQL)", () => {
   });
 
   beforeEach(async () => {
-    await db.query("TRUNCATE jobs");
+    await db.query("TRUNCATE jobs, workers CASCADE");
   });
 
   after(async () => {

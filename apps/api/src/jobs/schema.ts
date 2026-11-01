@@ -23,6 +23,7 @@ export const createJobSchema = z.strictObject({
       message: `must serialize to at most ${MAX_PAYLOAD_BYTES} bytes`,
     }),
   priority: z.number().int().min(0).max(100).default(0),
+  maxAttempts: z.number().int().min(1).max(20).default(3),
   runAt: z.iso.datetime({ offset: true }).optional(),
 });
 export type CreateJobInput = z.infer<typeof createJobSchema>;

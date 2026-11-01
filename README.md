@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 2** — jobs are submitted over HTTP (Phase 1) and executed by a separate worker process built with the Worker SDK. There is no retry/lease recovery, dashboard, or auth yet.
+**Current milestone: Phase 3** — jobs are submitted over HTTP, executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). There is no scheduler/priorities, dashboard, or auth yet.
 
 ## Architecture (target)
 
@@ -129,4 +129,15 @@ worker.register("email.send", async (job) => {
 await worker.start(); // later: await worker.stop() for a graceful shutdown
 ```
 
-Known limitation: if a worker crashes mid-job, that job stays `running` until Phase 3 adds leases.
+A job that fails is retried (default 3 attempts, backoff 1 s, 2 s, ... capped at 5 min); `report.build` with `shouldFail` therefore ends `failed` after its last attempt. If a worker process is killed mid-job, the job is picked up again after its lease (`LEASE_MS`, default 30 s) expires.
+
+## Reliability (Phase 3)
+
+| Setting (API `.env`) | Default | Meaning                                                            |
+| -------------------- | ------- | ------------------------------------------------------------------ |
+| `LEASE_MS`           | 30000   | A claimed job is owned this long; the SDK renews every third of it |
+| `RETRY_BASE_MS`      | 1000    | First retry delay; doubles per attempt                             |
+| `RETRY_MAX_MS`       | 300000  | Retry delay cap                                                    |
+| `REAPER_INTERVAL_MS` | 5000    | How often each API instance sweeps for expired leases              |
+
+Per job: `POST /jobs` accepts `maxAttempts` (1-20, default 3). `GET /jobs/:id/attempts` shows the per-attempt history. Handlers can throw `PermanentError` to skip retries. Delivery is **at-least-once**: write handlers to be idempotent (see [`docs/IDEMPOTENCY.md`](docs/IDEMPOTENCY.md)). Bugs and open problems found along the way are in [`docs/BUGS_FOUND.md`](docs/BUGS_FOUND.md).

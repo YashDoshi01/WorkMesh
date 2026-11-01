@@ -106,22 +106,26 @@ describe("worker protocol and atomic claiming (PostgreSQL)", () => {
   });
 
   describe("completion and failure", () => {
+    const POST = (path: string, body: object) => api(started.url, "POST", path, body);
+
     it("owner can complete a running job", async () => {
       await submit("t.a");
       const workerId = await register(["t.a"]);
       const [job] = await claim(workerId);
-      const r = await api(started.url, "POST", `/jobs/${job!.id}/complete`, { workerId });
+      const r = await POST(`/jobs/${job!.id}/complete`, { workerId, attempt: job!.attemptCount });
       assert.equal(r.status, 200);
       assert.equal(r.body.status, "succeeded");
       assert.ok(r.body.finishedAt);
+      assert.equal(r.body.leaseExpiresAt, null);
     });
 
-    it("owner can fail a running job and the error is stored", async () => {
-      await submit("t.a");
+    it("owner can fail a job; with no attempts left it becomes failed and the error is stored", async () => {
+      await submit("t.a", { maxAttempts: 1 });
       const workerId = await register(["t.a"]);
       const [job] = await claim(workerId);
-      const r = await api(started.url, "POST", `/jobs/${job!.id}/fail`, {
+      const r = await POST(`/jobs/${job!.id}/fail`, {
         workerId,
+        attempt: job!.attemptCount,
         error: "boom",
       });
       assert.equal(r.status, 200);
@@ -134,39 +138,36 @@ describe("worker protocol and atomic claiming (PostgreSQL)", () => {
       const owner = await register(["t.a"]);
       const thief = await register(["t.a"]);
       const [job] = await claim(owner);
-      const c = await api(started.url, "POST", `/jobs/${job!.id}/complete`, { workerId: thief });
-      assert.equal(c.status, 409);
-      const f = await api(started.url, "POST", `/jobs/${job!.id}/fail`, {
-        workerId: thief,
-        error: "x",
-      });
-      assert.equal(f.status, 409);
+      const attempt = job!.attemptCount;
+      assert.equal(
+        (await POST(`/jobs/${job!.id}/complete`, { workerId: thief, attempt })).status,
+        409,
+      );
+      assert.equal(
+        (await POST(`/jobs/${job!.id}/fail`, { workerId: thief, attempt, error: "x" })).status,
+        409,
+      );
       const still = await api(started.url, "GET", `/jobs/${job!.id}`);
       assert.equal(still.body.status, "running");
     });
 
-    it("finishing twice, or finishing a queued job, is a 409; unknown job is 404", async () => {
-      const queuedId = await submit("t.queued");
+    it("wrong attempt number is rejected even for the owning worker", async () => {
       await submit("t.a");
       const workerId = await register(["t.a"]);
       const [job] = await claim(workerId);
+      assert.equal((await POST(`/jobs/${job!.id}/complete`, { workerId, attempt: 2 })).status, 409);
+      assert.equal((await POST(`/jobs/${job!.id}/complete`, { workerId, attempt: 0 })).status, 400);
+    });
+
+    it("finishing a queued job is 409; an unknown job is 404", async () => {
+      const queuedId = await submit("t.queued");
+      const workerId = await register(["t.a"]);
       assert.equal(
-        (await api(started.url, "POST", `/jobs/${job!.id}/complete`, { workerId })).status,
-        200,
-      );
-      assert.equal(
-        (await api(started.url, "POST", `/jobs/${job!.id}/complete`, { workerId })).status,
-        409,
-      );
-      assert.equal(
-        (await api(started.url, "POST", `/jobs/${queuedId}/complete`, { workerId })).status,
+        (await POST(`/jobs/${queuedId}/complete`, { workerId, attempt: 1 })).status,
         409,
       );
       const ghost = "00000000-0000-4000-8000-000000000000";
-      assert.equal(
-        (await api(started.url, "POST", `/jobs/${ghost}/complete`, { workerId })).status,
-        404,
-      );
+      assert.equal((await POST(`/jobs/${ghost}/complete`, { workerId, attempt: 1 })).status, 404);
     });
   });
 

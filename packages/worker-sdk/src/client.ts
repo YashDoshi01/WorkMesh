@@ -2,11 +2,13 @@ import { z } from "zod";
 
 /** A job as handed to a handler. Only the fields a handler needs. */
 export interface ClaimedJob {
+  /** Stable across every attempt of this job: use it as an idempotency key. */
   id: string;
   type: string;
   payload: Record<string, unknown>;
-  /** 1 on the first execution. Later attempts exist only after a retry/recovery. */
+  /** 1 on the first execution, 2 on the first retry, ... Also the fencing token for reports. */
   attemptCount: number;
+  maxAttempts: number;
 }
 
 // TypeScript types vanish at runtime, so the response is validated like any untrusted input.
@@ -15,9 +17,19 @@ const claimedJobSchema = z.object({
   type: z.string(),
   payload: z.record(z.string(), z.unknown()),
   attemptCount: z.number().int(),
+  maxAttempts: z.number().int(),
 });
 const workerSchema = z.object({ id: z.uuid() });
-const claimResponseSchema = z.object({ jobs: z.array(claimedJobSchema) });
+const claimResponseSchema = z.object({
+  jobs: z.array(claimedJobSchema),
+  leaseMs: z.number().int().positive(),
+});
+
+export interface ClaimResult {
+  jobs: ClaimedJob[];
+  /** How long a lease lasts; the worker must renew well within this. */
+  leaseMs: number;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -34,10 +46,11 @@ export class WorkMeshClient {
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs = 10_000,
+    private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
   private async post(path: string, body: unknown): Promise<unknown> {
-    const res = await fetch(new URL(path, this.baseUrl), {
+    const res = await this.fetchImpl(new URL(path, this.baseUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -68,15 +81,26 @@ export class WorkMeshClient {
     await this.post(`/workers/${workerId}/heartbeat`, {});
   }
 
-  async claim(workerId: string, limit: number): Promise<ClaimedJob[]> {
-    return claimResponseSchema.parse(await this.post(`/workers/${workerId}/claim`, { limit })).jobs;
+  async claim(workerId: string, limit: number): Promise<ClaimResult> {
+    return claimResponseSchema.parse(await this.post(`/workers/${workerId}/claim`, { limit }));
   }
 
-  async complete(workerId: string, jobId: string): Promise<void> {
-    await this.post(`/jobs/${jobId}/complete`, { workerId });
+  /** Renews the lease on one job. Throws ApiError 409/404 if this attempt no longer owns it. */
+  async renewLease(workerId: string, jobId: string, attempt: number): Promise<void> {
+    await this.post(`/jobs/${jobId}/heartbeat`, { workerId, attempt });
   }
 
-  async fail(workerId: string, jobId: string, error: string): Promise<void> {
-    await this.post(`/jobs/${jobId}/fail`, { workerId, error });
+  async complete(workerId: string, jobId: string, attempt: number): Promise<void> {
+    await this.post(`/jobs/${jobId}/complete`, { workerId, attempt });
+  }
+
+  async fail(
+    workerId: string,
+    jobId: string,
+    attempt: number,
+    error: string,
+    retryable: boolean,
+  ): Promise<void> {
+    await this.post(`/jobs/${jobId}/fail`, { workerId, attempt, error, retryable });
   }
 }
