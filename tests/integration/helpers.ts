@@ -10,6 +10,7 @@ import {
   type Db,
   type AppOptions,
   type LifecycleConfig,
+  type RuntimeOptions,
 } from "@workmesh/api";
 
 // Real PostgreSQL, never a mock. A dedicated database keeps tests away from dev data.
@@ -59,11 +60,15 @@ export function startApi(
   config: Partial<LifecycleConfig> = {},
   /** Pass `null` for an app WITHOUT the operator plane (undefined would select the default keys). */
   options: AppOptions | null = TEST_AUTH,
+  runtime: RuntimeOptions = {},
 ): Promise<Started> {
   return new Promise((resolve) => {
-    const server = createApp(db, lifecycleFor(db, config), options ?? undefined).listen(0, () => {
-      resolve({ server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
-    });
+    const server = createApp(db, lifecycleFor(db, config), options ?? undefined, runtime).listen(
+      0,
+      () => {
+        resolve({ server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
+      },
+    );
   });
 }
 
@@ -100,5 +105,23 @@ export async function waitFor<T>(
     if (value) return value;
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
     await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+/** A connection string for another database on the same server (the tests' own scratch databases). */
+export function databaseUrlFor(name: string): string {
+  const url = new URL(testDatabaseUrl);
+  url.pathname = `/${name}`;
+  return url.toString();
+}
+
+/** Runs one statement against the server's default database (CREATE/DROP DATABASE need it). */
+export async function adminQuery(sql: string): Promise<void> {
+  const admin = new pg.Client({ connectionString: baseUrl });
+  await admin.connect();
+  try {
+    await admin.query(sql);
+  } finally {
+    await admin.end();
   }
 }

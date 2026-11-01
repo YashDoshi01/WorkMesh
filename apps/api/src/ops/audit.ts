@@ -12,6 +12,8 @@ export interface AuditEntry {
   targetId: string;
   details: Record<string, unknown>;
   requestId: string | null;
+  /** The caller's address as the API saw it (the real client only if TRUST_PROXY names the gateway). */
+  clientIp: string | null;
 }
 
 export interface AuditPage {
@@ -30,6 +32,7 @@ interface Row {
   target_id: string;
   details: Record<string, unknown>;
   request_id: string | null;
+  client_ip: string | null;
 }
 
 export class AuditRepository {
@@ -48,11 +51,12 @@ export class AuditRepository {
       targetId: string;
       details?: Record<string, unknown>;
       requestId?: string | undefined;
+      clientIp?: string | undefined;
     },
   ): Promise<void> {
     await q.query(
-      `INSERT INTO audit_log (actor, role, action, target_type, target_id, details, request_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO audit_log (actor, role, action, target_type, target_id, details, request_id, client_ip)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         principal.actor,
         principal.role,
@@ -61,6 +65,7 @@ export class AuditRepository {
         entry.targetId,
         JSON.stringify(entry.details ?? {}),
         entry.requestId ?? null,
+        entry.clientIp ?? null,
       ],
     );
   }
@@ -68,7 +73,7 @@ export class AuditRepository {
   /** Newest first. `before` is the id of the oldest entry already seen. */
   async list(limit: number, before?: string): Promise<AuditPage> {
     const result = await this.db.query<Row>(
-      `SELECT id, at, actor, role, action, target_type, target_id, details, request_id
+      `SELECT id, at, actor, role, action, target_type, target_id, details, request_id, client_ip
        FROM audit_log
        WHERE ($2::bigint IS NULL OR id < $2::bigint)
        ORDER BY id DESC
@@ -88,6 +93,7 @@ export class AuditRepository {
         targetId: r.target_id,
         details: r.details,
         requestId: r.request_id,
+        clientIp: r.client_ip,
       })),
       nextBefore: hasMore ? rows[rows.length - 1]!.id : null,
     };

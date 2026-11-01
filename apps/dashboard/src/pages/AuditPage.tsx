@@ -45,6 +45,7 @@ export function AuditPage() {
                   <tr>
                     <th scope="col">When</th>
                     <th scope="col">Who</th>
+                    <th scope="col">From</th>
                     <th scope="col">Action</th>
                     <th scope="col">Target</th>
                     <th scope="col">Details</th>
@@ -59,6 +60,7 @@ export function AuditPage() {
                       <td>
                         <StatusBadge status={e.role} label={e.actor} />
                       </td>
+                      <td className="mono">{e.clientIp ?? "–"}</td>
                       <td>
                         <code>{e.action}</code>
                       </td>

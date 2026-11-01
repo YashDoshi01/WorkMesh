@@ -23,5 +23,5 @@ export {
 export { WorkflowRepository } from "./workflows/repository.js";
 export { reconcileWorkflow } from "./workflows/reconcile.js";
 export { withTransaction } from "./db/tx.js";
-export { type AppOptions } from "./app.js";
+export { type AppOptions, type RuntimeOptions } from "./app.js";
 export { OpsQueries, type Stats, type WorkerHealth } from "./ops/queries.js";

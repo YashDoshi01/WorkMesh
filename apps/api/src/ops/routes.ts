@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { logInfo } from "@workmesh/shared";
 import { HttpError } from "../http/errors.js";
+import { clientIp } from "../http/middleware.js";
 import { parse } from "../http/validate.js";
 import type { JobLifecycle } from "../jobs/lifecycle.js";
 import { InvalidCursorError, type JobRepository } from "../jobs/repository.js";
@@ -143,7 +144,11 @@ export function opsRoutes(d: OpsDeps): Router {
   });
 
   // ------------------------------------------------------------- state-changing
-  const ctx = (req: Request) => ({ principal: principalOf(req), requestId: req.requestId });
+  const ctx = (req: Request) => ({
+    principal: principalOf(req),
+    requestId: req.requestId,
+    clientIp: clientIp(req),
+  });
 
   router.post("/jobs", operator, async (req, res) => {
     const input = parse(createJobSchema, req.body, "job");

@@ -1,0 +1,115 @@
+# The Phase 7 stack: ONE public entry point (NGINX) in front of TWO identical API containers that
+# share ONE PostgreSQL.
+#
+#   docker compose --env-file .env -f infra/compose.gateway.yaml up -d --build
+#   open http://localhost:8080/dashboard/
+#
+# Self-contained on purpose: it has its own database and does not touch the development
+# database from infra/compose.yaml. The API containers publish NO host ports; the only way in
+# is NGINX, which is what makes "everything goes through the gateway" true rather than a promise.
+#
+# REMINDER: these are containers on ONE machine. They share a kernel, a disk and a power supply.
+# That demonstrates stateless instances and load balancing; it does not give machine-level fault
+# tolerance. See docs/GATEWAY.md.
+
+name: ${GATEWAY_PROJECT:-workmesh-gateway}
+
+x-api: &api
+  image: workmesh/api:local # built once by api-1 below; api-2 reuses the very same image
+  init: true # a real PID 1 that forwards SIGTERM and reaps zombies
+  stop_grace_period: 30s # must exceed SHUTDOWN_DRAIN_MS + SHUTDOWN_GRACE_MS, or Docker SIGKILLs mid-drain
+  restart: "no" # tests stop/kill instances on purpose; set to unless-stopped for real use
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment: &api-env
+    DATABASE_URL: postgres://workmesh:workmesh@postgres:5432/workmesh
+    PORT: "3000"
+    NODE_ENV: ${NODE_ENV:-development}
+    OPERATOR_API_KEY: ${OPERATOR_API_KEY:?set OPERATOR_API_KEY in .env}
+    VIEWER_API_KEY: ${VIEWER_API_KEY:?set VIEWER_API_KEY in .env}
+    # Believe X-Forwarded-For ONLY from the gateway's own address (fixed below), never from anyone else.
+    TRUST_PROXY: ${GATEWAY_SUBNET_PREFIX:-172.28.57}.10
+    SHUTDOWN_DRAIN_MS: "3000"
+    SHUTDOWN_GRACE_MS: "20000"
+    DB_POOL_MAX: "10"
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/readyz"]
+    interval: 3s
+    timeout: 3s
+    retries: 10
+    start_period: 10s
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: workmesh
+      POSTGRES_PASSWORD: workmesh
+      POSTGRES_DB: workmesh
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workmesh -d workmesh"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [mesh]
+
+  api-1:
+    <<: *api
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api-1
+    networks:
+      mesh:
+        ipv4_address: ${GATEWAY_SUBNET_PREFIX:-172.28.57}.11
+
+  api-2:
+    <<: *api
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api-2
+    networks:
+      mesh:
+        ipv4_address: ${GATEWAY_SUBNET_PREFIX:-172.28.57}.12
+
+  gateway:
+    image: nginx:1.28-alpine
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      # The built dashboard (npm run build:dashboard); served under /dashboard/.
+      - ../apps/dashboard/dist:/usr/share/nginx/html/dashboard:ro
+    depends_on:
+      api-1:
+        condition: service_healthy
+      api-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/gateway-health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    networks:
+      mesh:
+        # A FIXED address, so the APIs can trust exactly it (TRUST_PROXY) and it never changes on restart.
+        ipv4_address: ${GATEWAY_SUBNET_PREFIX:-172.28.57}.10
+
+  # NGINX resolves the names api-1/api-2 ONCE when it starts. If a container were recreated with
+  # a new address, NGINX would keep sending to the old one until reloaded. Fixed addresses for the
+  # APIs (above) remove that failure mode instead of papering over it.
+
+networks:
+  mesh:
+    ipam:
+      config:
+        - subnet: ${GATEWAY_SUBNET_PREFIX:-172.28.57}.0/24
+
+volumes:
+  pgdata:

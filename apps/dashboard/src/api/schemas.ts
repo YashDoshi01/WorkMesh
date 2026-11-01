@@ -176,6 +176,7 @@ export const auditEntrySchema = z.object({
   targetId: z.string(),
   details: z.record(z.string(), z.unknown()),
   requestId: z.string().nullable(),
+  clientIp: z.string().nullable(),
 });
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 export const auditPageSchema = z.object({

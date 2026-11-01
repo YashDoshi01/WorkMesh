@@ -30,7 +30,11 @@
     "dev:worker": "tsx --env-file=.env apps/sample-worker/src/main.ts",
     "dev:dashboard": "npm run dev -w @workmesh/dashboard",
     "build:dashboard": "npm run build -w @workmesh/dashboard",
-    "test:dashboard": "npm run test -w @workmesh/dashboard"
+    "test:dashboard": "npm run test -w @workmesh/dashboard",
+    "gateway:up": "npm run build:dashboard && docker compose --env-file .env -f infra/compose.gateway.yaml up -d --build",
+    "gateway:down": "docker compose --env-file .env -f infra/compose.gateway.yaml down",
+    "gateway:logs": "docker compose --env-file .env -f infra/compose.gateway.yaml logs -f",
+    "test:gateway": "tsx --env-file-if-exists=.env --test --test-concurrency=1 tests/gateway/*.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

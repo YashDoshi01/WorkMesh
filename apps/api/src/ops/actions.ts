@@ -18,6 +18,7 @@ export const MAX_ATTEMPT_BUDGET = 1000;
 interface Context {
   principal: Principal;
   requestId: string | undefined;
+  clientIp: string | undefined;
 }
 
 /**
@@ -52,6 +53,7 @@ export class OpsActions {
           scheduledFor: job.scheduledFor,
         },
         requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
       });
       return job;
     });
@@ -74,6 +76,7 @@ export class OpsActions {
         targetId: id,
         details: { type: row.type },
         requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
       });
       return { outcome: "ok", value: toJob(row) };
     });
@@ -103,6 +106,7 @@ export class OpsActions {
         targetId: id,
         details: { type: row.type, attemptsGranted: attempts, attemptsSoFar: row.attempt_count },
         requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
       });
       return { outcome: "ok", value: toJob(row) };
     });
@@ -116,6 +120,7 @@ export class OpsActions {
         targetId: id,
         details: { name: workflow.name, statusAfter: workflow.status },
         requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
       }),
     );
     if (result.outcome === "not_found") return { outcome: "not_found" };
@@ -143,6 +148,7 @@ export class OpsActions {
         targetId: id,
         details: { name: schedule.name },
         requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
       });
       return { outcome: "ok", value: schedule };
     });
@@ -158,6 +164,7 @@ export class OpsActions {
         targetId: id,
         details: { name: existing.name },
         requestId: ctx.requestId,
+        clientIp: ctx.clientIp,
       });
       return { outcome: "ok", value: { name: existing.name } };
     });

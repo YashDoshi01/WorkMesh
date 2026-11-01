@@ -22,17 +22,64 @@ export interface AppOptions {
   viewerKey: string;
 }
 
+/** How long /readyz waits for the database before saying "not ready". */
+const READINESS_TIMEOUT_MS = 2000;
+
+export interface RuntimeOptions {
+  /** Names this instance in logs and in the X-Served-By response header. */
+  instanceId?: string;
+  /**
+   * Addresses allowed to set X-Forwarded-For (already validated; see TRUST_PROXY). Unset = trust
+   * nobody: req.ip is then always the socket's peer and the header is ignored.
+   */
+  trustProxy?: string[];
+  /** Flipped to `draining: true` by the shutdown sequence. */
+  drain?: { draining: boolean };
+}
+
 export function createApp(
   db: Db,
   lifecycle: JobLifecycle = new JobLifecycle(db, DEFAULT_LIFECYCLE_CONFIG),
   options?: AppOptions,
+  runtime: RuntimeOptions = {},
 ): Express {
   const app = express();
   app.disable("x-powered-by");
-  app.use(requestContext);
+  if (runtime.trustProxy) app.set("trust proxy", runtime.trustProxy);
+  app.use(requestContext(runtime.instanceId));
+  // While shutting down, tell the peer not to reuse this connection (a gateway keeps upstream
+  // connections open and would otherwise send its next request down one we are about to close).
+  app.use((_req, res, next) => {
+    if (runtime.drain?.draining) res.setHeader("Connection", "close");
+    next();
+  });
   app.use(express.json({ limit: "128kb" }));
+  // Liveness: "the process is up and answering". Deliberately does NOT touch the database: if
+  // the database is down, restarting every API instance would not help.
   app.get("/healthz", (_req, res) => {
     res.json({ status: "ok" });
+  });
+  // Readiness: "send me traffic". False while draining or if the database does not answer in
+  // time. The body says why in one word and never includes error text or connection details.
+  app.get("/readyz", async (_req, res) => {
+    if (runtime.drain?.draining) {
+      res.status(503).json({ status: "unavailable", reason: "draining" });
+      return;
+    }
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        db.query("SELECT 1"),
+        new Promise((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error("timeout")), READINESS_TIMEOUT_MS);
+        }),
+      ]);
+      res.json({ status: "ready" });
+    } catch {
+      res.status(503).json({ status: "unavailable", reason: "database" });
+    } finally {
+      clearTimeout(timer);
+    }
   });
 
   const jobs = new JobRepository(db);

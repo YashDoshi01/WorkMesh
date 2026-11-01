@@ -49,22 +49,26 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 
 ## Commands
 
-| Command                    | Purpose                                                                  |
-| -------------------------- | ------------------------------------------------------------------------ |
-| `npm run typecheck`        | TypeScript project-references build                                      |
-| `npm run lint`             | ESLint                                                                   |
-| `npm run format`           | Prettier write                                                           |
-| `npm run format:check`     | Prettier check                                                           |
-| `npm test`                 | Unit tests (`node:test` via `tsx`)                                       |
-| `npm run test:integration` | Integration tests (needs `npm run db:up`; uses database `workmesh_test`) |
-| `npm run dev:worker`       | Run the sample worker (needs the API running)                            |
-| `npm run dev:api`          | Run the API (applies migrations on start)                                |
-| `npm run dev:dashboard`    | Run the dashboard dev server on http://localhost:5173                    |
-| `npm run build:dashboard`  | Typecheck and build the dashboard to `apps/dashboard/dist`               |
-| `npm run test:dashboard`   | Dashboard tests (Vitest + Testing Library)                               |
-| `npm run db:up`            | Start PostgreSQL                                                         |
-| `npm run db:down`          | Stop PostgreSQL                                                          |
-| `npm run db:logs`          | Follow Postgres logs                                                     |
+| Command                    | Purpose                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `npm run typecheck`        | TypeScript project-references build                                           |
+| `npm run lint`             | ESLint                                                                        |
+| `npm run format`           | Prettier write                                                                |
+| `npm run format:check`     | Prettier check                                                                |
+| `npm test`                 | Unit tests (`node:test` via `tsx`)                                            |
+| `npm run test:integration` | Integration tests (needs `npm run db:up`; uses database `workmesh_test`)      |
+| `npm run dev:worker`       | Run the sample worker (needs the API running)                                 |
+| `npm run dev:api`          | Run the API (applies migrations on start)                                     |
+| `npm run dev:dashboard`    | Run the dashboard dev server on http://localhost:5173                         |
+| `npm run build:dashboard`  | Typecheck and build the dashboard to `apps/dashboard/dist`                    |
+| `npm run test:dashboard`   | Dashboard tests (Vitest + Testing Library)                                    |
+| `npm run gateway:up`       | Build and start NGINX + 2 API instances + PostgreSQL on http://localhost:8080 |
+| `npm run gateway:down`     | Stop that stack                                                               |
+| `npm run gateway:logs`     | Follow the stack's logs (NGINX logs JSON per request)                         |
+| `npm run test:gateway`     | End-to-end tests of that stack (needs Docker, about 90 s)                     |
+| `npm run db:up`            | Start PostgreSQL                                                              |
+| `npm run db:down`          | Stop PostgreSQL                                                               |
+| `npm run db:logs`          | Follow Postgres logs                                                          |
 
 ## Repository layout
 
@@ -90,6 +94,7 @@ Wait until Postgres is healthy (`docker compose -f infra/compose.yaml ps`). Loca
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Gateway and scaling](docs/GATEWAY.md)
 - [Decisions](docs/DECISIONS.md)
 - [Learning log](docs/LEARNING_LOG.md)
 - [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
@@ -185,7 +190,19 @@ A node runs only after everything it depends on has **succeeded**; its job does 
 
 ```bash
 # add OPERATOR_API_KEY and VIEWER_API_KEY to .env first (see .env.example); the API will not start without them
-npm run dev:api & npm run dev:worker & npm run dev:dashboard     # then open http://localhost:5173
+npm run dev:api & npm run dev:worker & npm run dev:dashboard     # then open http://localhost:5173/dashboard/
 ```
 
 Sign in with the viewer key (read-only) or the operator key (can submit, cancel, retry, enable/disable). It shows queue depth, throughput, failures, retries and timing percentiles from the real database, a chart of jobs finished, jobs with attempt history, workflows, schedules, worker health and an audit log of every change made from it. The server enforces every rule: for example a running job cannot be cancelled and a job inside a workflow cannot be retried, whatever the UI offers. Details, screens and security notes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md). The operator endpoints live under `/ops/*` and need `Authorization: Bearer <key>`; the machine endpoints (workers, `POST /jobs`, ...) are unchanged and **still unauthenticated** until Phase 8.
+
+## Gateway and two API instances (Phase 7)
+
+```bash
+# OPERATOR_API_KEY and VIEWER_API_KEY must be in .env
+npm run gateway:up                       # then open http://localhost:8080/dashboard/
+for i in 1 2 3 4; do curl -s -D - -o /dev/null localhost:8080/readyz | grep -i x-served-by; done   # alternates api-1 / api-2
+docker stop workmesh-gateway-api-1-1     # keep calling the API: it keeps answering from api-2
+npm run test:gateway                     # automated version of all of the above
+```
+
+Everything enters through NGINX on port 8080; the API containers publish no ports. Both API containers run the same image and share one PostgreSQL, so a job created through one is visible through the other. Behaviour, measured numbers and limitations (NGINX is a single point of failure; health checks are passive; containers on one laptop are not separate machines): [`docs/GATEWAY.md`](docs/GATEWAY.md). The dashboard now lives at `/dashboard/`.

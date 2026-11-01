@@ -1,0 +1,17 @@
+# Keep the build context small and free of secrets. Manifests (package.json) of every workspace
+# MUST stay: npm ci needs them to resolve the workspace layout recorded in package-lock.json.
+**/node_modules
+**/dist
+**/.vite
+.git
+.env
+.env.*
+!.env.example
+out
+docs
+tests
+db/explain
+apps/dashboard/src
+apps/sample-worker/src
+packages/worker-sdk/src
+*.md

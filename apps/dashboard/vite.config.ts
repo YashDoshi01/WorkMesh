@@ -7,6 +7,9 @@ import { defineConfig } from "vitest/config";
 const apiTarget = process.env.VITE_API_PROXY_TARGET ?? "http://localhost:3000";
 
 export default defineConfig({
+  // The dashboard lives under /dashboard/ so that, behind the gateway, ONE origin can serve both
+  // the app (/dashboard/...) and the API (/jobs, /ops, ...) without their paths colliding.
+  base: "/dashboard/",
   plugins: [react()],
   server: {
     port: 5173,
