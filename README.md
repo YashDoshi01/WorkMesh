@@ -4,7 +4,7 @@ WorkMesh is a durable job scheduling and workflow **control plane**. Application
 
 This repository follows a phased implementation plan in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md). The product name is WorkMesh; the plan document originated as “TaskForge.”
 
-**Current milestone: Phase 3** — jobs are submitted over HTTP, executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). There is no scheduler/priorities, dashboard, or auth yet.
+**Current milestone: Phase 4** — jobs are submitted over HTTP (optionally delayed, with a priority), executed by separate worker processes, retried with exponential backoff, and recovered if a worker dies (leases + fencing). Recurring cron schedules create jobs automatically. There is no workflow engine, dashboard, or auth yet.
 
 ## Architecture (target)
 
@@ -141,3 +141,23 @@ A job that fails is retried (default 3 attempts, backoff 1 s, 2 s, ... capped at
 | `REAPER_INTERVAL_MS` | 5000    | How often each API instance sweeps for expired leases              |
 
 Per job: `POST /jobs` accepts `maxAttempts` (1-20, default 3). `GET /jobs/:id/attempts` shows the per-attempt history. Handlers can throw `PermanentError` to skip retries. Delivery is **at-least-once**: write handlers to be idempotent (see [`docs/IDEMPOTENCY.md`](docs/IDEMPOTENCY.md)). Bugs and open problems found along the way are in [`docs/BUGS_FOUND.md`](docs/BUGS_FOUND.md).
+
+## Delayed jobs, priorities and recurring schedules (Phase 4)
+
+```bash
+# run once, in the future
+curl -X POST localhost:3000/jobs -H "content-type: application/json" \
+  -d '{"type":"email.send","payload":{"to":"a@b.c"},"runAt":"2030-01-01T09:00:00Z","priority":50}'
+
+# every weekday at 09:00 New York time
+curl -X POST localhost:3000/schedules -H "content-type: application/json" \
+  -d '{"name":"morning-report","cron":"0 9 * * 1-5","timezone":"America/New_York","jobType":"report.build","payload":{}}'
+curl "localhost:3000/jobs?scheduleId=<id>"      # the jobs it created
+curl -X PATCH localhost:3000/schedules/<id> -H "content-type: application/json" -d '{"enabled":false}'
+```
+
+- **Priority** is 0-100 (higher first). Waiting adds to it: each priority point is worth 60 seconds, so a priority-0 job outranks anything that becomes eligible 100 minutes after it. A retry restarts that clock.
+- **Cron** has exactly five fields (minute hour day-of-month month day-of-week), evaluated in the schedule's IANA time zone (default UTC). At most one job per occurrence is created, even with many API instances running.
+- **If the API was down**, only the latest overdue occurrence runs, not every missed one. Re-enabling a disabled schedule does not catch up.
+- `SCHEDULER_INTERVAL_MS` (default 1000) controls how often each API instance checks for due schedules.
+- Query-plan measurements and how to reproduce them: [`docs/QUERY_PLANS.md`](docs/QUERY_PLANS.md).

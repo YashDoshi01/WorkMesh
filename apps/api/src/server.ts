@@ -4,6 +4,7 @@ import { migrate } from "./db/migrate.js";
 import { createPool } from "./db/pool.js";
 import { JobLifecycle } from "./jobs/lifecycle.js";
 import { LeaseReaper } from "./jobs/reaper.js";
+import { Scheduler } from "./schedules/scheduler.js";
 
 const env = parseEnv(process.env);
 const db = createPool(env.DATABASE_URL);
@@ -23,12 +24,15 @@ const lifecycle = new JobLifecycle(db, {
 });
 const reaper = new LeaseReaper(lifecycle, env.REAPER_INTERVAL_MS);
 reaper.start();
+const scheduler = new Scheduler(db, env.SCHEDULER_INTERVAL_MS);
+scheduler.start();
 
 const server = createApp(db, lifecycle).listen(env.PORT, () => {
   logInfo("api_listening", {
     port: env.PORT,
     leaseMs: env.LEASE_MS,
     reaperIntervalMs: env.REAPER_INTERVAL_MS,
+    schedulerIntervalMs: env.SCHEDULER_INTERVAL_MS,
   });
 });
 
@@ -37,8 +41,7 @@ const server = createApp(db, lifecycle).listen(env.PORT, () => {
 function shutdown(signal: string): void {
   logInfo("shutdown_started", { signal });
   server.close(() => {
-    void reaper
-      .stop()
+    void Promise.all([reaper.stop(), scheduler.stop()])
       .then(() => db.end())
       .then(() => process.exit(0));
   });

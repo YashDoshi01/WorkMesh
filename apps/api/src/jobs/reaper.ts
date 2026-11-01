@@ -1,4 +1,5 @@
-import { logError, logWarn } from "@workmesh/shared";
+import { logWarn } from "@workmesh/shared";
+import { PeriodicTask } from "../util/periodic.js";
 import type { JobLifecycle } from "./lifecycle.js";
 
 /**
@@ -7,14 +8,14 @@ import type { JobLifecycle } from "./lifecycle.js";
  * "only one reaper exists".
  */
 export class LeaseReaper {
-  private timer: NodeJS.Timeout | undefined;
-  private current: Promise<unknown> | undefined;
-  private stopped = true;
+  private readonly loop: PeriodicTask;
 
   constructor(
     private readonly lifecycle: JobLifecycle,
-    private readonly intervalMs: number,
-  ) {}
+    intervalMs: number,
+  ) {
+    this.loop = new PeriodicTask("reaper_sweep", () => this.runOnce(), intervalMs);
+  }
 
   /** One sweep. Returns how many jobs were recovered. Exposed so tests can drive it directly. */
   async runOnce(): Promise<number> {
@@ -31,26 +32,11 @@ export class LeaseReaper {
   }
 
   start(): void {
-    if (!this.stopped) return;
-    this.stopped = false;
-    const tick = (): void => {
-      this.current = this.runOnce()
-        .catch((err: unknown) => {
-          logError("reaper_sweep_failed", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        })
-        .finally(() => {
-          if (!this.stopped) this.timer = setTimeout(tick, this.intervalMs);
-        });
-    };
-    this.timer = setTimeout(tick, this.intervalMs);
+    this.loop.start();
   }
 
   /** Stops scheduling and waits for a sweep already in progress. */
-  async stop(): Promise<void> {
-    this.stopped = true;
-    clearTimeout(this.timer);
-    await this.current;
+  stop(): Promise<void> {
+    return this.loop.stop();
   }
 }

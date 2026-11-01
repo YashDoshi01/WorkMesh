@@ -11,6 +11,8 @@ export const envSchema = z.object({
   RETRY_MAX_MS: z.coerce.number().int().min(1).max(86_400_000).default(300_000),
   // How often each API instance sweeps for expired leases.
   REAPER_INTERVAL_MS: z.coerce.number().int().min(100).max(600_000).default(5000),
+  // How often each API instance checks for recurring schedules that are due.
+  SCHEDULER_INTERVAL_MS: z.coerce.number().int().min(100).max(60_000).default(1000),
 });
 
 export type Env = z.infer<typeof envSchema>;

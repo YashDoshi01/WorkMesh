@@ -4,6 +4,8 @@ import { errorHandler, notFound, requestContext } from "./http/middleware.js";
 import { DEFAULT_LIFECYCLE_CONFIG, JobLifecycle, type LifecycleConfig } from "./jobs/lifecycle.js";
 import { JobRepository } from "./jobs/repository.js";
 import { jobRoutes } from "./jobs/routes.js";
+import { ScheduleRepository } from "./schedules/repository.js";
+import { scheduleRoutes } from "./schedules/routes.js";
 import { WorkerRepository } from "./workers/repository.js";
 import { workerRoutes } from "./workers/routes.js";
 
@@ -19,6 +21,7 @@ export function createApp(
     res.json({ status: "ok" });
   });
   app.use(jobRoutes(new JobRepository(db), lifecycle));
+  app.use(scheduleRoutes(new ScheduleRepository(db)));
   app.use(workerRoutes(new WorkerRepository(db), lifecycle));
   app.use(notFound);
   app.use(errorHandler);

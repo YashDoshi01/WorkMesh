@@ -8,6 +8,10 @@ export interface Job {
   status: JobStatus;
   priority: number;
   runAt: string;
+  /** When the job was originally meant to run. Never changes; run_at moves on retry. */
+  scheduledFor: string;
+  /** The recurring schedule that created this job, if any. */
+  scheduleId: string | null;
   attemptCount: number;
   maxAttempts: number;
   leaseExpiresAt: string | null;
@@ -26,6 +30,8 @@ export interface JobRow {
   status: JobStatus;
   priority: number;
   run_at: Date;
+  scheduled_for: Date;
+  schedule_id: string | null;
   attempt_count: number;
   max_attempts: number;
   lease_expires_at: Date | null;
@@ -38,7 +44,7 @@ export interface JobRow {
 }
 
 export const COLUMNS =
-  "id, type, payload, status, priority, run_at, attempt_count, max_attempts, lease_expires_at, claimed_by, started_at, finished_at, last_error, created_at, updated_at";
+  "id, type, payload, status, priority, run_at, scheduled_for, schedule_id, attempt_count, max_attempts, lease_expires_at, claimed_by, started_at, finished_at, last_error, created_at, updated_at";
 
 // Postgres timestamps have microsecond precision; JS Dates only milliseconds.
 // The pagination cursor must keep full precision or rows could be skipped/repeated.
@@ -52,6 +58,8 @@ export function toJob(row: JobRow): Job {
     status: row.status,
     priority: row.priority,
     runAt: row.run_at.toISOString(),
+    scheduledFor: row.scheduled_for.toISOString(),
+    scheduleId: row.schedule_id,
     attemptCount: row.attempt_count,
     maxAttempts: row.max_attempts,
     leaseExpiresAt: row.lease_expires_at?.toISOString() ?? null,
@@ -105,8 +113,9 @@ export class JobRepository {
   /** A single INSERT is atomic on its own; the row is committed before this resolves. */
   async create(input: CreateJobInput): Promise<Job> {
     const result = await this.db.query<JobRow>(
-      `INSERT INTO jobs (type, payload, priority, run_at, max_attempts)
-       VALUES ($1, $2, $3, COALESCE($4::timestamptz, now()), $5)
+      `INSERT INTO jobs (type, payload, priority, run_at, scheduled_for, max_attempts)
+       SELECT $1, $2, $3, t.at, t.at, $5
+       FROM (SELECT COALESCE($4::timestamptz, now()) AS at) AS t
        RETURNING ${COLUMNS}`,
       [
         input.type,
@@ -129,6 +138,7 @@ export class JobRepository {
   async list(filter: {
     status?: JobStatus | undefined;
     type?: string | undefined;
+    scheduleId?: string | undefined;
     limit: number;
     cursor?: string | undefined;
   }): Promise<JobPage> {
@@ -141,6 +151,10 @@ export class JobRepository {
     if (filter.type) {
       params.push(filter.type);
       where.push(`type = $${params.length}`);
+    }
+    if (filter.scheduleId) {
+      params.push(filter.scheduleId);
+      where.push(`schedule_id = $${params.length}`);
     }
     if (filter.cursor) {
       const [ts, id] = decodeCursor(filter.cursor);

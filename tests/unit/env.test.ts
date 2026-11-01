@@ -25,6 +25,7 @@ describe("parseEnv", () => {
     assert.equal(env.RETRY_BASE_MS, 1000);
     assert.equal(env.RETRY_MAX_MS, 300_000);
     assert.equal(env.REAPER_INTERVAL_MS, 5000);
+    assert.equal(env.SCHEDULER_INTERVAL_MS, 1000);
   });
 
   it("rejects out-of-range or non-numeric reliability settings", () => {
@@ -32,5 +33,6 @@ describe("parseEnv", () => {
     assert.throws(() => parseEnv({ ...base, LEASE_MS: "10" }), /LEASE_MS/);
     assert.throws(() => parseEnv({ ...base, RETRY_BASE_MS: "0" }), /RETRY_BASE_MS/);
     assert.throws(() => parseEnv({ ...base, REAPER_INTERVAL_MS: "abc" }), /REAPER_INTERVAL_MS/);
+    assert.throws(() => parseEnv({ ...base, SCHEDULER_INTERVAL_MS: "5" }), /SCHEDULER_INTERVAL_MS/);
   });
 });

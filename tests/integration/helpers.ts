@@ -36,7 +36,7 @@ export async function setupTestDb(): Promise<Db> {
 }
 
 export async function resetTables(db: Db): Promise<void> {
-  await db.query("TRUNCATE jobs, workers CASCADE");
+  await db.query("TRUNCATE jobs, workers, schedules CASCADE");
 }
 
 export interface Started {
@@ -64,7 +64,7 @@ export function stopApi(server: Server): Promise<void> {
 
 export async function api(
   base: string,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ): Promise<{ status: number; body: any }> {
@@ -73,7 +73,8 @@ export async function api(
     headers: { "content-type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  return { status: res.status, body: await res.json() };
+  const text = await res.text();
+  return { status: res.status, body: text ? JSON.parse(text) : undefined };
 }
 
 export async function waitFor<T>(

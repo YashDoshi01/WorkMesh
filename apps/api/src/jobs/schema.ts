@@ -31,6 +31,7 @@ export type CreateJobInput = z.infer<typeof createJobSchema>;
 export const listJobsQuerySchema = z.strictObject({
   status: z.enum(JOB_STATUSES).optional(),
   type: jobType.optional(),
+  scheduleId: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   cursor: z.string().min(1).max(200).optional(),
 });

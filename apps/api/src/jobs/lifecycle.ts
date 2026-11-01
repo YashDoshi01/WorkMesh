@@ -52,21 +52,35 @@ export class JobLifecycle {
   ) {}
 
   /**
-   * Atomically hands up to `limit` eligible jobs to one worker.
+   * Atomically hands up to `limit` eligible jobs to one worker, best rank first
+   * (priority with aging, then FIFO; see migration 0004 for the rank formula).
    *
-   * The inner SELECT locks the chosen rows (`FOR UPDATE`) and skips rows another
-   * transaction already locked (`SKIP LOCKED`), so concurrent claimers each get a
-   * different set. The UPDATE flips them to `running`, bumps the attempt number and
-   * sets the lease deadline; the INSERT records the attempt. All in one statement.
+   * For each type the worker handles, a LATERAL probe reads that type's best `limit` rows
+   * from jobs_claim_order_idx (type, claim_rank DESC, ...), locking them `FOR UPDATE SKIP
+   * LOCKED` so concurrent claimers get different rows. The probes' candidates are merged
+   * and the best `limit` overall win. Cost is O(types x limit), independent of how many
+   * jobs of OTHER types are waiting. Candidates that lose the merge stay locked only until
+   * this statement ends, which briefly hides them from concurrent claimers: harmless, but
+   * the reason a worker with very many types is not free.
+   * The UPDATE flips the winners to `running`, bumps the attempt number and sets the lease
+   * deadline; the INSERT records the attempt. All in one statement.
    */
   async claim(workerId: string, jobTypes: string[], limit: number): Promise<Job[]> {
     const result = await this.db.query<JobRow>(
       `WITH picked AS (
-         SELECT id AS pid FROM jobs
-         WHERE status = 'queued' AND run_at <= now() AND type = ANY($1::text[])
-         ORDER BY run_at, created_at, id
+         SELECT id AS pid FROM (
+           SELECT c.id, c.claim_rank, c.run_at, c.created_at
+           FROM (SELECT DISTINCT unnest($1::text[]) AS type) AS wanted
+           CROSS JOIN LATERAL (
+             SELECT id, claim_rank, run_at, created_at FROM jobs
+             WHERE status = 'queued' AND type = wanted.type AND run_at <= now()
+             ORDER BY claim_rank DESC, run_at, created_at, id
+             LIMIT $2
+             FOR UPDATE SKIP LOCKED
+           ) AS c
+         ) AS candidates
+         ORDER BY claim_rank DESC, run_at, created_at, id
          LIMIT $2
-         FOR UPDATE SKIP LOCKED
        ),
        claimed AS (
          UPDATE jobs
@@ -86,14 +100,17 @@ export class JobLifecycle {
       [jobTypes, limit, workerId, this.config.leaseMs],
     );
     // Row order from a CTE is unspecified; present the jobs in claim order.
+    const rank = (row: JobRow): number => row.priority * 60 - row.run_at.getTime() / 1000;
     return result.rows
-      .map(toJob)
+      .slice()
       .sort(
         (a, b) =>
-          a.runAt.localeCompare(b.runAt) ||
-          a.createdAt.localeCompare(b.createdAt) ||
+          rank(b) - rank(a) ||
+          a.run_at.getTime() - b.run_at.getTime() ||
+          a.created_at.getTime() - b.created_at.getTime() ||
           a.id.localeCompare(b.id),
-      );
+      )
+      .map(toJob);
   }
 
   /** Extends the lease, but only for the worker and attempt that currently own the job. */
