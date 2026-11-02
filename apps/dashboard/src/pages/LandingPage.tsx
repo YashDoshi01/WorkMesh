@@ -53,7 +53,10 @@ const STEPS = [
 const SNIPPET = `import { WorkMesh, Worker } from "@workmesh/worker-sdk";
 
 // In your application: queue a job (a client key)
-const workmesh = new WorkMesh({ apiUrl, apiKey: process.env.WORKMESH_CLIENT_KEY });
+const workmesh = new WorkMesh({
+  apiUrl,
+  apiKey: process.env.WORKMESH_CLIENT_KEY,
+});
 await workmesh.jobs.submit({
   type: "email.send",
   payload: { to: "ada@example.com" },
