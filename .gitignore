@@ -72,3 +72,6 @@ Thumbs.db
 .idea/
 .vscode-test
 bench/.generated/
+
+# npm package staging (generated)
+.publish

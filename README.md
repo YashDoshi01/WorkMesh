@@ -132,10 +132,10 @@ curl -X POST localhost:3000/jobs -H "content-type: application/json" \
 curl localhost:3000/jobs      # status goes queued -> running -> succeeded
 ```
 
-`{"type":"report.build","payload":{"shouldFail":true}}` ends as `failed` with `lastError` set. Writing your own worker:
+`{"type":"report.build","payload":{"shouldFail":true}}` ends as `failed` with `lastError` set. Writing your own worker (outside this repository, `npm install workmesh-sdk-service`; inside it the same package is the workspace `@workmesh/worker-sdk`):
 
 ```ts
-import { Worker } from "@workmesh/worker-sdk";
+import { Worker } from "workmesh-sdk-service";
 const worker = new Worker({ apiUrl: "http://localhost:3000", concurrency: 4 });
 worker.register("email.send", async (job) => {
   /* your code */
@@ -265,8 +265,14 @@ New optional settings (see `.env.example`): `SESSION_TTL_HOURS`, `PUBLIC_SIGNUP`
 
 ## Queue jobs from your code (Phase 11)
 
+The SDK is on npm as [`workmesh-sdk-service`](https://www.npmjs.com/package/workmesh-sdk-service):
+
+```bash
+npm install workmesh-sdk-service
+```
+
 ```ts
-import { WorkMesh } from "@workmesh/worker-sdk";
+import { WorkMesh } from "workmesh-sdk-service";
 
 const workmesh = new WorkMesh({
   apiUrl: "http://localhost:8080",

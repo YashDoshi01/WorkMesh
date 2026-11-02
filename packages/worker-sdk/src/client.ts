@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { checkApiKey, checkBaseUrl, cleanServerText } from "./security.js";
 
 /** A job as handed to a handler. Only the fields a handler needs. */
 export interface ClaimedJob {
@@ -54,7 +55,11 @@ export class WorkMeshClient {
     private readonly fetchImpl: typeof fetch = fetch,
     /** A `worker` API key (wm_...). Sent as a Bearer token; never logged by the SDK. */
     private readonly apiKey?: string,
-  ) {}
+    allowInsecureHttp = false,
+  ) {
+    checkBaseUrl(baseUrl, allowInsecureHttp);
+    if (apiKey !== undefined) checkApiKey(apiKey);
+  }
 
   private async post(path: string, body: unknown): Promise<unknown> {
     const res = await this.fetchImpl(new URL(path, this.baseUrl), {
@@ -65,15 +70,27 @@ export class WorkMeshClient {
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.timeoutMs),
+      // An API never legitimately redirects; following one could carry the key somewhere else.
+      redirect: "error",
     });
     const text = await res.text();
-    const json: unknown = text ? JSON.parse(text) : undefined;
+    let json: unknown;
+    try {
+      json = text ? JSON.parse(text) : undefined;
+    } catch {
+      // e.g. an HTML error page from a proxy. Do not let a SyntaxError (which quotes the body) escape.
+      if (res.ok)
+        throw new ApiError(0, "bad_response", "WorkMesh answered with an unexpected response.");
+      json = undefined;
+    }
     if (!res.ok) {
-      const err = (json as { error?: { code?: string; message?: string } } | undefined)?.error;
+      const err = (json as { error?: { code?: unknown; message?: unknown } } | undefined)?.error;
       throw new ApiError(
         res.status,
-        err?.code ?? "unknown",
-        err?.message ?? `HTTP ${res.status} from ${path}`,
+        typeof err?.code === "string" ? cleanServerText(err.code, 64) : "unknown",
+        typeof err?.message === "string"
+          ? cleanServerText(err.message)
+          : `HTTP ${res.status} from ${path}`,
       );
     }
     return json;

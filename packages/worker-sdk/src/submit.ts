@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "./client.js";
+import { checkApiKey, checkBaseUrl, cleanServerText } from "./security.js";
 
 /**
  * The application side of WorkMesh: queue jobs and look at them afterwards.
@@ -14,6 +15,8 @@ export interface WorkMeshOptions {
   apiUrl: string;
   /** A `client` API key (create one under "API keys" in the app). */
   apiKey: string;
+  /** Allow a plain-http apiUrl to a remote host. Off by default: the key would travel unencrypted. */
+  allowInsecureHttp?: boolean;
   /** Give up on one request after this long. Default 10 s. */
   timeoutMs?: number;
   /**
@@ -143,6 +146,8 @@ class Jobs {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: AbortSignal.timeout(this.options.timeoutMs),
+        // An API never legitimately redirects; following one could carry the key somewhere else.
+        redirect: "error",
       });
     } catch {
       throw new ApiError(
@@ -164,8 +169,10 @@ class Jobs {
       )?.error;
       const err = new ApiError(
         res.status,
-        e?.code ?? "unknown",
-        e?.message ?? `WorkMesh answered HTTP ${res.status}`,
+        typeof e?.code === "string" ? cleanServerText(e.code, 64) : "unknown",
+        typeof e?.message === "string"
+          ? cleanServerText(e.message)
+          : `WorkMesh answered HTTP ${res.status}`,
       );
       if (Array.isArray(e?.details)) err.details = e.details as ApiError["details"];
       const retryAfter = Number(res.headers.get("retry-after"));
@@ -255,6 +262,8 @@ export class WorkMesh {
   constructor(options: WorkMeshOptions) {
     if (!options.apiKey) throw invalid("apiKey is required (a client key from the WorkMesh app)");
     if (!options.apiUrl) throw invalid("apiUrl is required");
+    checkApiKey(options.apiKey);
+    checkBaseUrl(options.apiUrl, options.allowInsecureHttp ?? false);
     this.jobs = new Jobs(
       {
         apiUrl: options.apiUrl,

@@ -25,6 +25,8 @@ export interface WorkerOptions {
   apiUrl: string;
   /** A `worker` API key issued by an operator (POST /ops/keys). Required by a real server. */
   apiKey?: string;
+  /** Allow a plain-http apiUrl to a remote host. Off by default: the key would travel unencrypted. */
+  allowInsecureHttp?: boolean;
   name?: string;
   /** Max handlers running at once in this process. Default 1. */
   concurrency?: number;
@@ -86,7 +88,13 @@ export class Worker {
   private wake: (() => void) | undefined;
 
   constructor(options: WorkerOptions) {
-    this.client = new WorkMeshClient(options.apiUrl, 10_000, options.fetch, options.apiKey);
+    this.client = new WorkMeshClient(
+      options.apiUrl,
+      10_000,
+      options.fetch,
+      options.apiKey,
+      options.allowInsecureHttp ?? false,
+    );
     this.name = options.name ?? `worker-${randomUUID().slice(0, 8)}`;
     this.concurrency = options.concurrency ?? 1;
     this.pollIntervalMs = options.pollIntervalMs ?? 1000;

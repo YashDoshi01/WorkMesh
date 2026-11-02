@@ -50,7 +50,7 @@ const STEPS = [
   },
 ];
 
-const SNIPPET = `import { WorkMesh, Worker } from "@workmesh/worker-sdk";
+const SNIPPET = `import { WorkMesh, Worker } from "workmesh-sdk-service";
 
 // In your application: queue a job (a client key)
 const workmesh = new WorkMesh({

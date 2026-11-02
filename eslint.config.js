@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "coverage/**"],
+    ignores: ["**/dist/**", "**/node_modules/**", "coverage/**", "**/.publish/**"],
   },
   eslint.configs.recommended,
   tseslint.configs.recommended,
@@ -18,5 +18,10 @@ export default defineConfig(
     // Test helpers read untyped JSON responses.
     files: ["tests/**/*.ts", "bench/**/*.ts"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  {
+    // Plain Node scripts (the npm package build).
+    files: ["**/*.mjs"],
+    languageOptions: { globals: { process: "readonly", console: "readonly" } },
   },
 );
