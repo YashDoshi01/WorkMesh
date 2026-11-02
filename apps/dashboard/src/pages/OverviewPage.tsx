@@ -4,6 +4,8 @@ import type { Stats } from "../api/schemas";
 import { useSession } from "../auth/auth";
 import { PageHeader, Time } from "../components/bits";
 import { DataView } from "../components/DataView";
+import { Icon, type IconName } from "../components/Icon";
+import { Sparkline } from "../components/Sparkline";
 import { StackedColumns } from "../components/StackedColumns";
 import { useResource } from "../hooks/useResource";
 import { formatCount, formatDuration, formatRate } from "../lib/format";
@@ -15,31 +17,68 @@ const WINDOWS = [
   { minutes: 1440, label: "24 hours" },
 ];
 
-function Tile({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+function Tile({
+  label,
+  value,
+  hint,
+  icon,
+  tone = "brand",
+  trend,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  icon?: IconName;
+  tone?: "brand" | "good" | "bad" | "warn";
+  trend?: ReactNode;
+}) {
   return (
     <div className="tile">
       <dt>{label}</dt>
       <dd className="tile-value">{value}</dd>
       {hint ? <dd className="tile-hint">{hint}</dd> : null}
+      {trend}
+      {icon ? (
+        <span className={`tile-icon tone-${tone}`} aria-hidden="true">
+          <Icon name={icon} />
+        </span>
+      ) : null}
     </div>
   );
 }
 
+const greeting = (name: string): string => {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  return `${part}, ${name.split(/\s+/)[0] ?? name}`;
+};
+
 function Distribution({ title, d }: { title: string; d: Stats["window"]["executionSeconds"] }) {
+  const rows = d
+    ? ([
+        ["typical (p50)", d.p50],
+        ["slow (p95)", d.p95],
+        ["slowest", d.max],
+      ] as const)
+    : [];
+  const top = d ? Math.max(d.max, 0.001) : 1;
   return (
     <div className="tile">
       <dt>{title}</dt>
       {d ? (
-        <dd className="tile-dist">
-          <span>
-            <strong>{formatDuration(d.p50)}</strong> typical (p50)
-          </span>
-          <span>
-            <strong>{formatDuration(d.p95)}</strong> slow (p95)
-          </span>
-          <span>
-            <strong>{formatDuration(d.max)}</strong> slowest
-          </span>
+        <dd className="dist-bars">
+          {rows.map(([name, value]) => (
+            <span className="dist-row" key={name}>
+              <span>{name}</span>
+              <span className="dist-track" aria-hidden="true">
+                <span
+                  className="dist-fill"
+                  style={{ width: `${Math.max(3, (value / top) * 100)}%` }}
+                />
+              </span>
+              <strong>{formatDuration(value)}</strong>
+            </span>
+          ))}
         </dd>
       ) : (
         <dd className="tile-hint">Nothing measured in this window.</dd>
@@ -93,7 +132,7 @@ function GetStarted({ canOperate }: { canOperate: boolean }) {
 }
 
 export function OverviewPage() {
-  const { api, canOperate } = useSession();
+  const { api, canOperate, me } = useSession();
   const [windowMinutes, setWindowMinutes] = useState(60);
   const stats = useResource(`stats:${windowMinutes}`, (s) => api.stats(windowMinutes, s), {
     intervalMs: 5000,
@@ -103,20 +142,27 @@ export function OverviewPage() {
 
   return (
     <>
-      <PageHeader title="Overview" />
+      <PageHeader
+        title="Overview"
+        subtitle={
+          me ? `${greeting(me.user.name)}. Here is how ${me.account.name} is doing.` : undefined
+        }
+      />
       <div className="filter-row" role="group" aria-label="Time window">
         <span className="filter-label">Time window</span>
-        {WINDOWS.map((w) => (
-          <button
-            key={w.minutes}
-            type="button"
-            aria-pressed={w.minutes === windowMinutes}
-            className={w.minutes === windowMinutes ? "chip chip-on" : "chip"}
-            onClick={() => setWindowMinutes(w.minutes)}
-          >
-            {w.label}
-          </button>
-        ))}
+        <div className="segmented">
+          {WINDOWS.map((w) => (
+            <button
+              key={w.minutes}
+              type="button"
+              aria-pressed={w.minutes === windowMinutes}
+              className={w.minutes === windowMinutes ? "chip chip-on" : "chip"}
+              onClick={() => setWindowMinutes(w.minutes)}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <DataView resource={stats} what="statistics">
@@ -130,25 +176,31 @@ export function OverviewPage() {
             <>
               {brandNew ? <GetStarted canOperate={canOperate} /> : null}
               <p className="muted small">
+                <span className="live-dot" aria-hidden="true" />
                 Updated <Time iso={s.generatedAt} relative /> · refreshes every 5 seconds
               </p>
 
               <section aria-labelledby="now-h">
                 <h2 id="now-h">Right now</h2>
-                <dl className="tiles">
+                <dl className="tiles tiles-5">
                   <Tile
                     label="Ready to run"
+                    icon="jobs"
                     value={formatCount(s.queue.ready)}
                     hint="waiting for a worker"
                   />
                   <Tile
                     label="Scheduled for later"
+                    icon="schedules"
+                    tone="warn"
                     value={formatCount(s.queue.scheduled)}
                     hint="delayed or waiting out a retry"
                   />
-                  <Tile label="Running" value={formatCount(s.queue.running)} />
+                  <Tile label="Running" icon="activity" value={formatCount(s.queue.running)} />
                   <Tile
                     label="Longest wait"
+                    icon="timer"
+                    tone="warn"
                     value={
                       s.queue.oldestReadyAgeSeconds === null
                         ? "–"
@@ -162,6 +214,8 @@ export function OverviewPage() {
                   />
                   <Tile
                     label="Workers"
+                    icon="workers"
+                    tone="good"
                     value={`${formatCount(s.workers.alive)} alive`}
                     hint={
                       s.workers.stale > 0
@@ -174,20 +228,32 @@ export function OverviewPage() {
 
               <section aria-labelledby="window-h">
                 <h2 id="window-h">Last {label}</h2>
-                <dl className="tiles">
-                  <Tile label="Succeeded" value={formatCount(s.window.succeeded)} />
+                <dl className="tiles tiles-6">
+                  <Tile
+                    label="Succeeded"
+                    icon="success"
+                    tone="good"
+                    value={formatCount(s.window.succeeded)}
+                    trend={<Sparkline values={s.series.map((b) => b.succeeded)} />}
+                  />
                   <Tile
                     label="Failed"
+                    icon="alert"
+                    tone="bad"
                     value={formatCount(s.window.failed)}
                     hint="retries used up"
+                    trend={<Sparkline bad values={s.series.map((b) => b.failed)} />}
                   />
                   <Tile
                     label="Throughput"
+                    icon="bolt"
                     value={`${formatRate(s.window.throughputPerMinute)} /min`}
                     hint="succeeded jobs per minute"
                   />
                   <Tile
                     label="Retries"
+                    icon="refresh"
+                    tone="warn"
                     value={formatCount(s.window.retries)}
                     hint="attempts after the first"
                   />

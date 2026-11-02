@@ -11,6 +11,11 @@ export default defineConfig({
   // the app (/dashboard/...) and the API (/jobs, /ops, ...) without their paths colliding.
   base: "/dashboard/",
   plugins: [react()],
+  build: {
+    // Never inline assets as data: URIs. The gateway sends a strict Content-Security-Policy
+    // (font-src 'self'), which blocks data: fonts; small font files must stay real files.
+    assetsInlineLimit: 0,
+  },
   server: {
     port: 5173,
     proxy: { "/ops": { target: apiTarget } },

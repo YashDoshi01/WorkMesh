@@ -146,10 +146,21 @@ export function ConfirmButton({
   );
 }
 
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+export function PageHeader({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
     <div className="page-header">
-      <h1>{title}</h1>
+      <div>
+        <h1>{title}</h1>
+        {subtitle ? <p className="muted">{subtitle}</p> : null}
+      </div>
       {children ? <div className="page-actions">{children}</div> : null}
     </div>
   );

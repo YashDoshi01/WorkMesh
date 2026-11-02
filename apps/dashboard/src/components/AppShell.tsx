@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useSession } from "../auth/auth";
 import { useTheme, type Theme } from "../lib/theme";
 import { StatusBadge } from "./bits";
+import { CommandPalette } from "./CommandPalette";
 import { Icon, type IconName } from "./Icon";
 
 interface NavItem {
@@ -49,12 +50,15 @@ const initials = (name: string): string =>
     .map((p) => p[0]!.toUpperCase())
     .join("") || "?";
 
-/** The signed-in layout: sidebar navigation, a top bar with the user menu, and the page. */
+const isMac = (): boolean => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? "");
+
+/** The signed-in layout: sidebar navigation, a top bar with search and the user menu, and the page. */
 export function AppShell({ children }: { children: ReactNode }) {
   const { me, signOut, canOperate } = useSession();
   const [theme, setTheme] = useTheme();
   const [navOpen, setNavOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const location = useLocation();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +70,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     setNavOpen(false);
     setMenuOpen(false);
   }
+
+  // Ctrl+K / Cmd+K opens the command menu from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -84,8 +100,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [menuOpen]);
 
   if (!me) return null;
+  const shortcut = isMac() ? "⌘K" : "Ctrl K";
   return (
     <div className="shell" data-nav={navOpen ? "open" : "closed"}>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <aside className="sidebar" aria-label="Sidebar">
         <Link to="/" className="brand sidebar-brand">
           <span className="brand-mark">
@@ -94,9 +114,19 @@ export function AppShell({ children }: { children: ReactNode }) {
           WorkMesh
         </Link>
         <div className="org-chip" title={me.account.slug}>
-          <span className="muted">Organisation</span>
-          <strong>{me.account.name}</strong>
+          <span className="org-avatar" aria-hidden="true">
+            {initials(me.account.name)}
+          </span>
+          <span className="org-text">
+            <span className="muted">Organisation</span>
+            <strong>{me.account.name}</strong>
+          </span>
         </div>
+        <button type="button" className="search-trigger" onClick={() => setPaletteOpen(true)}>
+          <Icon name="search" />
+          <span>Search</span>
+          <kbd>{shortcut}</kbd>
+        </button>
         <nav aria-label="Main">
           {GROUPS.map((group) => (
             <div key={group.label}>
@@ -114,11 +144,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebar-spacer" />
         {canOperate ? (
-          <Link to="/submit" className="btn primary">
+          <Link to="/submit" className="btn primary sidebar-cta">
             <Icon name="send" /> Submit a job
           </Link>
         ) : (
-          <p className="muted small" role="note">
+          <p className="readonly-note small" role="note">
             You have read-only access. Ask an admin if you need to change something.
           </p>
         )}
@@ -136,7 +166,25 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Icon name="menu" />
           </button>
+          <button
+            type="button"
+            className="search-trigger topbar-search"
+            onClick={() => setPaletteOpen(true)}
+            aria-label="Open command menu"
+          >
+            <Icon name="search" />
+            <span>Jump to…</span>
+            <kbd>{shortcut}</kbd>
+          </button>
           <div className="topbar-right">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              <Icon name={theme === "dark" ? "sun" : "moon"} />
+            </button>
             <div className="user-menu" ref={menuRef}>
               <button
                 type="button"
@@ -149,7 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {initials(me.user.name)}
                 </span>
                 <span className="visually-hidden">Account menu for </span>
-                {me.user.name}
+                <span className="user-name">{me.user.name}</span>
               </button>
               {menuOpen ? (
                 <div className="menu" role="menu">
@@ -176,7 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       {theme === t.value ? <Icon name="check" /> : null}
                     </button>
                   ))}
-                  <hr style={{ border: 0, borderTop: "1px solid var(--grid)", margin: "6px 0" }} />
+                  <hr className="menu-sep" />
                   <Link to="/settings" role="menuitem">
                     <Icon name="settings" /> Settings
                   </Link>
@@ -188,10 +236,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="app-main" id="main">
+        <main className="app-main" id="main" key={location.pathname}>
           {children}
         </main>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }
